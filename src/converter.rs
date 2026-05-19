@@ -12,6 +12,18 @@ fn min_input() -> Decimal {
     dec!(-9999999999999999)
 }
 
+fn pi() -> Decimal {
+    Decimal::from_str("3.14159265358979323846264338").expect("pi constant")
+}
+
+fn deg_to_rad_factor() -> Decimal {
+    pi().checked_div(dec!(180)).expect("deg→rad factor")
+}
+
+fn rad_to_deg_factor() -> Decimal {
+    dec!(180).checked_div(pi()).expect("rad→deg factor")
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnitSystem {
     Imperial,
@@ -21,10 +33,16 @@ pub enum UnitSystem {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum UnitCategory {
     Length,
+    Area,
     Weight,
-    Temperature,
     Volume,
     Speed,
+    Force,
+    Pressure,
+    Energy,
+    Power,
+    Temperature,
+    Angle,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -32,16 +50,25 @@ pub enum Unit {
     // Length
     Feet,
     Inches,
+    Yards,
     Miles,
     Meters,
     Centimeters,
     Millimeters,
+    Micrometers,
     Kilometers,
-    // Weight
+    // Area
+    SquareMeters,
+    SquareCentimeters,
+    SquareFeet,
+    SquareInches,
+    Acres,
+    // Weight (mass)
     Pounds,
     Ounces,
     Kilograms,
     Grams,
+    MetricTons,
     // Temperature
     Fahrenheit,
     Celsius,
@@ -54,26 +81,65 @@ pub enum Unit {
     Milliliters,
     CubicMeters,
     // Speed
-    MilesPerHour,
+    MetersPerSecond,
     KilometersPerHour,
+    MilesPerHour,
+    FeetPerSecond,
+    Knots,
+    // Force
+    Newtons,
+    Kilonewtons,
+    PoundForce,
+    // Pressure
+    Pascals,
+    Kilopascals,
+    Megapascals,
+    Psi,
+    Bar,
+    Atmospheres,
+    // Energy
+    Joules,
+    Kilojoules,
+    Calories,
+    Kilocalories,
+    Btu,
+    // Power
+    Watts,
+    Kilowatts,
+    Horsepower,
+    // Angle
+    Degrees,
+    Radians,
 }
 
 impl UnitCategory {
-    pub const ALL: [Self; 5] = [
+    pub const ALL: [Self; 11] = [
         Self::Length,
+        Self::Area,
         Self::Weight,
-        Self::Temperature,
         Self::Volume,
         Self::Speed,
+        Self::Force,
+        Self::Pressure,
+        Self::Energy,
+        Self::Power,
+        Self::Temperature,
+        Self::Angle,
     ];
 
     pub fn label(self) -> &'static str {
         match self {
             Self::Length => "Length",
-            Self::Weight => "Weight",
+            Self::Area => "Area",
+            Self::Weight => "Weight (mass)",
             Self::Temperature => "Temperature",
             Self::Volume => "Volume",
             Self::Speed => "Speed",
+            Self::Force => "Force",
+            Self::Pressure => "Pressure",
+            Self::Energy => "Energy",
+            Self::Power => "Power",
+            Self::Angle => "Angle",
         }
     }
 }
@@ -81,28 +147,48 @@ impl UnitCategory {
 impl Unit {
     pub fn category(self) -> UnitCategory {
         match self {
-            Self::Feet | Self::Inches | Self::Miles | Self::Meters | Self::Centimeters
-            | Self::Millimeters | Self::Kilometers => UnitCategory::Length,
-            Self::Pounds | Self::Ounces | Self::Kilograms | Self::Grams => {
+            Self::Feet | Self::Inches | Self::Yards | Self::Miles | Self::Meters
+            | Self::Centimeters | Self::Millimeters | Self::Micrometers | Self::Kilometers => {
+                UnitCategory::Length
+            }
+            Self::SquareMeters | Self::SquareCentimeters | Self::SquareFeet
+            | Self::SquareInches | Self::Acres => UnitCategory::Area,
+            Self::Pounds | Self::Ounces | Self::Kilograms | Self::Grams | Self::MetricTons => {
                 UnitCategory::Weight
             }
             Self::Fahrenheit | Self::Celsius | Self::Kelvin => UnitCategory::Temperature,
             Self::Gallons | Self::Quarts | Self::FluidOunces | Self::Liters
             | Self::Milliliters | Self::CubicMeters => UnitCategory::Volume,
-            Self::MilesPerHour | Self::KilometersPerHour => UnitCategory::Speed,
+            Self::MetersPerSecond | Self::KilometersPerHour | Self::MilesPerHour
+            | Self::FeetPerSecond | Self::Knots => UnitCategory::Speed,
+            Self::Newtons | Self::Kilonewtons | Self::PoundForce => UnitCategory::Force,
+            Self::Pascals | Self::Kilopascals | Self::Megapascals | Self::Psi | Self::Bar
+            | Self::Atmospheres => UnitCategory::Pressure,
+            Self::Joules | Self::Kilojoules | Self::Calories | Self::Kilocalories | Self::Btu => {
+                UnitCategory::Energy
+            }
+            Self::Watts | Self::Kilowatts | Self::Horsepower => UnitCategory::Power,
+            Self::Degrees | Self::Radians => UnitCategory::Angle,
         }
     }
 
     pub fn system(self) -> UnitSystem {
         match self {
-            Self::Feet | Self::Inches | Self::Miles | Self::Pounds | Self::Ounces
+            Self::Feet | Self::Inches | Self::Yards | Self::Miles | Self::Pounds | Self::Ounces
             | Self::Gallons | Self::Quarts | Self::FluidOunces | Self::Fahrenheit
-            | Self::MilesPerHour => UnitSystem::Imperial,
-            Self::Meters | Self::Centimeters | Self::Millimeters | Self::Kilometers
-            | Self::Kilograms | Self::Grams | Self::Liters | Self::Milliliters
-            | Self::CubicMeters | Self::Celsius | Self::Kelvin | Self::KilometersPerHour => {
-                UnitSystem::Metric
+            | Self::SquareFeet | Self::SquareInches | Self::Acres | Self::MilesPerHour
+            | Self::FeetPerSecond | Self::PoundForce | Self::Psi | Self::Btu | Self::Horsepower => {
+                UnitSystem::Imperial
             }
+            Self::Meters | Self::Centimeters | Self::Millimeters | Self::Micrometers
+            | Self::Kilometers | Self::Kilograms | Self::Grams | Self::MetricTons | Self::Liters
+            | Self::Milliliters | Self::CubicMeters | Self::Celsius | Self::Kelvin
+            | Self::SquareMeters | Self::SquareCentimeters | Self::MetersPerSecond
+            | Self::KilometersPerHour | Self::Knots | Self::Newtons | Self::Kilonewtons
+            | Self::Pascals | Self::Kilopascals | Self::Megapascals | Self::Bar
+            | Self::Atmospheres | Self::Joules | Self::Kilojoules | Self::Calories
+            | Self::Kilocalories | Self::Watts | Self::Kilowatts | Self::Degrees
+            | Self::Radians => UnitSystem::Metric,
         }
     }
 
@@ -110,26 +196,56 @@ impl Unit {
         match self {
             Self::Feet => "Feet",
             Self::Inches => "Inches",
+            Self::Yards => "Yards",
             Self::Miles => "Miles",
             Self::Meters => "Meters",
             Self::Centimeters => "Centimeters",
             Self::Millimeters => "Millimeters",
+            Self::Micrometers => "Micrometers (µm)",
             Self::Kilometers => "Kilometers",
+            Self::SquareMeters => "Square meters",
+            Self::SquareCentimeters => "Square centimeters",
+            Self::SquareFeet => "Square feet",
+            Self::SquareInches => "Square inches",
+            Self::Acres => "Acres",
             Self::Pounds => "Pounds (lbs)",
             Self::Ounces => "Ounces",
             Self::Kilograms => "Kilograms",
             Self::Grams => "Grams",
+            Self::MetricTons => "Metric tons (t)",
             Self::Fahrenheit => "°F",
             Self::Celsius => "°C",
             Self::Kelvin => "Kelvin",
             Self::Gallons => "Gallons (US)",
             Self::Quarts => "Quarts (US)",
-            Self::FluidOunces => "Fluid Ounces (US)",
+            Self::FluidOunces => "Fluid ounces (US)",
             Self::Liters => "Liters",
             Self::Milliliters => "Milliliters",
-            Self::CubicMeters => "Cubic Meters",
-            Self::MilesPerHour => "Miles per hour (mph)",
+            Self::CubicMeters => "Cubic meters",
+            Self::MetersPerSecond => "Meters per second (m/s)",
             Self::KilometersPerHour => "Kilometers per hour (km/h)",
+            Self::MilesPerHour => "Miles per hour (mph)",
+            Self::FeetPerSecond => "Feet per second (ft/s)",
+            Self::Knots => "Knots",
+            Self::Newtons => "Newtons (N)",
+            Self::Kilonewtons => "Kilonewtons (kN)",
+            Self::PoundForce => "Pound-force (lbf)",
+            Self::Pascals => "Pascals (Pa)",
+            Self::Kilopascals => "Kilopascals (kPa)",
+            Self::Megapascals => "Megapascals (MPa)",
+            Self::Psi => "Pounds per sq in (psi)",
+            Self::Bar => "Bar",
+            Self::Atmospheres => "Atmospheres (atm)",
+            Self::Joules => "Joules (J)",
+            Self::Kilojoules => "Kilojoules (kJ)",
+            Self::Calories => "Calories (cal)",
+            Self::Kilocalories => "Kilocalories (kcal)",
+            Self::Btu => "BTU",
+            Self::Watts => "Watts (W)",
+            Self::Kilowatts => "Kilowatts (kW)",
+            Self::Horsepower => "Horsepower (hp)",
+            Self::Degrees => "Degrees (°)",
+            Self::Radians => "Radians (rad)",
         }
     }
 
@@ -138,17 +254,27 @@ impl Unit {
             UnitCategory::Length => &[
                 Unit::Feet,
                 Unit::Inches,
+                Unit::Yards,
                 Unit::Miles,
                 Unit::Meters,
                 Unit::Centimeters,
                 Unit::Millimeters,
+                Unit::Micrometers,
                 Unit::Kilometers,
+            ],
+            UnitCategory::Area => &[
+                Unit::SquareFeet,
+                Unit::SquareInches,
+                Unit::Acres,
+                Unit::SquareMeters,
+                Unit::SquareCentimeters,
             ],
             UnitCategory::Weight => &[
                 Unit::Pounds,
                 Unit::Ounces,
                 Unit::Kilograms,
                 Unit::Grams,
+                Unit::MetricTons,
             ],
             UnitCategory::Temperature => &[Unit::Fahrenheit, Unit::Celsius, Unit::Kelvin],
             UnitCategory::Volume => &[
@@ -159,7 +285,31 @@ impl Unit {
                 Unit::Milliliters,
                 Unit::CubicMeters,
             ],
-            UnitCategory::Speed => &[Unit::MilesPerHour, Unit::KilometersPerHour],
+            UnitCategory::Speed => &[
+                Unit::FeetPerSecond,
+                Unit::MilesPerHour,
+                Unit::Knots,
+                Unit::MetersPerSecond,
+                Unit::KilometersPerHour,
+            ],
+            UnitCategory::Force => &[Unit::PoundForce, Unit::Newtons, Unit::Kilonewtons],
+            UnitCategory::Pressure => &[
+                Unit::Psi,
+                Unit::Atmospheres,
+                Unit::Pascals,
+                Unit::Kilopascals,
+                Unit::Megapascals,
+                Unit::Bar,
+            ],
+            UnitCategory::Energy => &[
+                Unit::Btu,
+                Unit::Joules,
+                Unit::Kilojoules,
+                Unit::Calories,
+                Unit::Kilocalories,
+            ],
+            UnitCategory::Power => &[Unit::Horsepower, Unit::Watts, Unit::Kilowatts],
+            UnitCategory::Angle => &[Unit::Degrees, Unit::Radians],
         }
     }
 
@@ -172,6 +322,10 @@ impl Unit {
             .unwrap_or(units[0])
     }
 
+    pub fn compatible_targets(from: Unit) -> Vec<Unit> {
+        Unit::units_for_category(from.category()).to_vec()
+    }
+
     pub fn paired_unit(unit: Unit) -> Unit {
         match unit {
             Unit::Feet => Unit::Meters,
@@ -179,12 +333,20 @@ impl Unit {
             Unit::Inches => Unit::Centimeters,
             Unit::Centimeters => Unit::Inches,
             Unit::Millimeters => Unit::Inches,
+            Unit::Micrometers => Unit::Inches,
+            Unit::Yards => Unit::Meters,
             Unit::Miles => Unit::Kilometers,
             Unit::Kilometers => Unit::Miles,
+            Unit::SquareFeet => Unit::SquareMeters,
+            Unit::SquareMeters => Unit::SquareFeet,
+            Unit::SquareInches => Unit::SquareCentimeters,
+            Unit::SquareCentimeters => Unit::SquareInches,
+            Unit::Acres => Unit::SquareMeters,
             Unit::Pounds => Unit::Kilograms,
             Unit::Kilograms => Unit::Pounds,
             Unit::Ounces => Unit::Grams,
             Unit::Grams => Unit::Ounces,
+            Unit::MetricTons => Unit::Pounds,
             Unit::Fahrenheit => Unit::Celsius,
             Unit::Celsius => Unit::Fahrenheit,
             Unit::Kelvin => Unit::Celsius,
@@ -194,8 +356,30 @@ impl Unit {
             Unit::FluidOunces => Unit::Milliliters,
             Unit::Milliliters => Unit::FluidOunces,
             Unit::CubicMeters => Unit::Gallons,
+            Unit::MetersPerSecond => Unit::FeetPerSecond,
+            Unit::FeetPerSecond => Unit::MetersPerSecond,
             Unit::MilesPerHour => Unit::KilometersPerHour,
             Unit::KilometersPerHour => Unit::MilesPerHour,
+            Unit::Knots => Unit::KilometersPerHour,
+            Unit::Newtons => Unit::PoundForce,
+            Unit::PoundForce => Unit::Newtons,
+            Unit::Kilonewtons => Unit::PoundForce,
+            Unit::Pascals => Unit::Psi,
+            Unit::Psi => Unit::Pascals,
+            Unit::Kilopascals => Unit::Psi,
+            Unit::Megapascals => Unit::Psi,
+            Unit::Bar => Unit::Psi,
+            Unit::Atmospheres => Unit::Psi,
+            Unit::Joules => Unit::Btu,
+            Unit::Btu => Unit::Joules,
+            Unit::Kilojoules => Unit::Btu,
+            Unit::Calories => Unit::Joules,
+            Unit::Kilocalories => Unit::Joules,
+            Unit::Watts => Unit::Horsepower,
+            Unit::Horsepower => Unit::Watts,
+            Unit::Kilowatts => Unit::Horsepower,
+            Unit::Degrees => Unit::Radians,
+            Unit::Radians => Unit::Degrees,
         }
     }
 }
@@ -203,12 +387,16 @@ impl Unit {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedInput {
     pub value: Decimal,
-    /// Unit suffix from the input field, if the user typed one (e.g. `mm`, `in`).
     pub unit: Option<Unit>,
 }
 
 /// Optional unit aliases (longest match first). Case-insensitive.
 const UNIT_ALIASES: &[(&str, Unit)] = &[
+    // Speed
+    ("meters per second", Unit::MetersPerSecond),
+    ("metres per second", Unit::MetersPerSecond),
+    ("feet per second", Unit::FeetPerSecond),
+    ("foot per second", Unit::FeetPerSecond),
     ("miles per hour", Unit::MilesPerHour),
     ("kilometers per hour", Unit::KilometersPerHour),
     ("kilometres per hour", Unit::KilometersPerHour),
@@ -217,6 +405,44 @@ const UNIT_ALIASES: &[(&str, Unit)] = &[
     ("kph", Unit::KilometersPerHour),
     ("mph", Unit::MilesPerHour),
     ("mi/h", Unit::MilesPerHour),
+    ("m/s", Unit::MetersPerSecond),
+    ("ft/s", Unit::FeetPerSecond),
+    ("knot", Unit::Knots),
+    ("knots", Unit::Knots),
+    // Pressure
+    ("pounds per square inch", Unit::Psi),
+    ("megapascal", Unit::Megapascals),
+    ("megapascals", Unit::Megapascals),
+    ("kilopascal", Unit::Kilopascals),
+    ("kilopascals", Unit::Kilopascals),
+    ("atmosphere", Unit::Atmospheres),
+    ("atmospheres", Unit::Atmospheres),
+    ("pound-force", Unit::PoundForce),
+    ("pound force", Unit::PoundForce),
+    ("newton", Unit::Newtons),
+    ("newtons", Unit::Newtons),
+    ("kilonewton", Unit::Kilonewtons),
+    ("kilonewtons", Unit::Kilonewtons),
+    ("kilojoule", Unit::Kilojoules),
+    ("kilojoules", Unit::Kilojoules),
+    ("kilocalorie", Unit::Kilocalories),
+    ("kilocalories", Unit::Kilocalories),
+    ("horsepower", Unit::Horsepower),
+    ("micrometer", Unit::Micrometers),
+    ("micrometers", Unit::Micrometers),
+    ("micrometre", Unit::Micrometers),
+    ("micrometres", Unit::Micrometers),
+    ("square meter", Unit::SquareMeters),
+    ("square meters", Unit::SquareMeters),
+    ("square metre", Unit::SquareMeters),
+    ("square foot", Unit::SquareFeet),
+    ("square feet", Unit::SquareFeet),
+    ("square inch", Unit::SquareInches),
+    ("square inches", Unit::SquareInches),
+    ("metric ton", Unit::MetricTons),
+    ("metric tons", Unit::MetricTons),
+    ("tonne", Unit::MetricTons),
+    ("tonnes", Unit::MetricTons),
     ("fluid ounce", Unit::FluidOunces),
     ("fluid ounces", Unit::FluidOunces),
     ("fl oz", Unit::FluidOunces),
@@ -263,8 +489,29 @@ const UNIT_ALIASES: &[(&str, Unit)] = &[
     ("inches", Unit::Inches),
     ("foot", Unit::Feet),
     ("feet", Unit::Feet),
+    ("yard", Unit::Yards),
+    ("yards", Unit::Yards),
     ("mile", Unit::Miles),
     ("miles", Unit::Miles),
+    ("acre", Unit::Acres),
+    ("acres", Unit::Acres),
+    ("radian", Unit::Radians),
+    ("radians", Unit::Radians),
+    ("degree", Unit::Degrees),
+    ("degrees", Unit::Degrees),
+    ("joule", Unit::Joules),
+    ("joules", Unit::Joules),
+    ("watt", Unit::Watts),
+    ("watts", Unit::Watts),
+    ("pascal", Unit::Pascals),
+    ("pascals", Unit::Pascals),
+    ("calorie", Unit::Calories),
+    ("calories", Unit::Calories),
+    ("µm", Unit::Micrometers),
+    ("um", Unit::Micrometers),
+    ("μm", Unit::Micrometers),
+    ("mpa", Unit::Megapascals),
+    ("kpa", Unit::Kilopascals),
     ("mm", Unit::Millimeters),
     ("cm", Unit::Centimeters),
     ("km", Unit::Kilometers),
@@ -272,13 +519,18 @@ const UNIT_ALIASES: &[(&str, Unit)] = &[
     ("oz", Unit::Ounces),
     ("lb", Unit::Pounds),
     ("lbs", Unit::Pounds),
+    ("lbf", Unit::PoundForce),
     ("kg", Unit::Kilograms),
     ("ft", Unit::Feet),
+    ("yd", Unit::Yards),
     ("mi", Unit::Miles),
     ("gal", Unit::Gallons),
     ("qt", Unit::Quarts),
     ("°f", Unit::Fahrenheit),
     ("°c", Unit::Celsius),
+    ("°", Unit::Degrees),
+    ("deg", Unit::Degrees),
+    ("rad", Unit::Radians),
     ("f", Unit::Fahrenheit),
     ("c", Unit::Celsius),
     ("k", Unit::Kelvin),
@@ -287,6 +539,25 @@ const UNIT_ALIASES: &[(&str, Unit)] = &[
     ("l", Unit::Liters),
     ("in", Unit::Inches),
     ("m3", Unit::CubicMeters),
+    ("m2", Unit::SquareMeters),
+    ("ft2", Unit::SquareFeet),
+    ("in2", Unit::SquareInches),
+    ("sqft", Unit::SquareFeet),
+    ("sqin", Unit::SquareInches),
+    ("psi", Unit::Psi),
+    ("atm", Unit::Atmospheres),
+    ("bar", Unit::Bar),
+    ("pa", Unit::Pascals),
+    ("n", Unit::Newtons),
+    ("j", Unit::Joules),
+    ("kj", Unit::Kilojoules),
+    ("cal", Unit::Calories),
+    ("kcal", Unit::Kilocalories),
+    ("btu", Unit::Btu),
+    ("w", Unit::Watts),
+    ("kw", Unit::Kilowatts),
+    ("hp", Unit::Horsepower),
+    ("t", Unit::MetricTons),
 ];
 
 impl Unit {
@@ -302,15 +573,23 @@ impl Unit {
         match self {
             Self::Feet => "ft",
             Self::Inches => "in",
+            Self::Yards => "yd",
             Self::Miles => "mi",
             Self::Meters => "m",
             Self::Centimeters => "cm",
             Self::Millimeters => "mm",
+            Self::Micrometers => "µm",
             Self::Kilometers => "km",
+            Self::SquareFeet => "ft²",
+            Self::SquareInches => "in²",
+            Self::SquareMeters => "m²",
+            Self::SquareCentimeters => "cm²",
+            Self::Acres => "ac",
             Self::Pounds => "lb",
             Self::Ounces => "oz",
             Self::Kilograms => "kg",
             Self::Grams => "g",
+            Self::MetricTons => "t",
             Self::Fahrenheit => "°F",
             Self::Celsius => "°C",
             Self::Kelvin => "K",
@@ -320,13 +599,57 @@ impl Unit {
             Self::Liters => "L",
             Self::Milliliters => "ml",
             Self::CubicMeters => "m³",
+            Self::MetersPerSecond => "m/s",
             Self::MilesPerHour => "mph",
             Self::KilometersPerHour => "km/h",
+            Self::FeetPerSecond => "ft/s",
+            Self::Knots => "kt",
+            Self::Newtons => "N",
+            Self::Kilonewtons => "kN",
+            Self::PoundForce => "lbf",
+            Self::Pascals => "Pa",
+            Self::Kilopascals => "kPa",
+            Self::Megapascals => "MPa",
+            Self::Psi => "psi",
+            Self::Bar => "bar",
+            Self::Atmospheres => "atm",
+            Self::Joules => "J",
+            Self::Kilojoules => "kJ",
+            Self::Calories => "cal",
+            Self::Kilocalories => "kcal",
+            Self::Btu => "BTU",
+            Self::Watts => "W",
+            Self::Kilowatts => "kW",
+            Self::Horsepower => "hp",
+            Self::Degrees => "°",
+            Self::Radians => "rad",
         }
     }
 }
 
-/// Parse a numeric value with an optional trailing unit (`10.99`, `25 mm`, `36in`).
+pub fn peek_unit_from_input(raw: &str) -> Option<Unit> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    if let Ok(parsed) = parse_input_expression(trimmed) {
+        return parsed.unit;
+    }
+
+    if let Some(u) = Unit::from_alias(trimmed) {
+        return Some(u);
+    }
+
+    if let Ok((_, unit_token)) = split_value_and_unit(trimmed) {
+        if let Some(token) = unit_token {
+            return Unit::from_alias(&token);
+        }
+    }
+
+    None
+}
+
 pub fn parse_input_expression(raw: &str) -> ConvertResult<ParsedInput> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -346,7 +669,6 @@ pub fn parse_input_expression(raw: &str) -> ConvertResult<ParsedInput> {
     Ok(ParsedInput { value, unit })
 }
 
-/// Parse and validate a plain number (no unit suffix).
 #[cfg_attr(not(test), allow(dead_code))]
 pub fn parse_input(raw: &str) -> ConvertResult<Decimal> {
     parse_input_expression(raw).map(|p| p.value)
@@ -400,7 +722,6 @@ fn parse_number(raw: &str) -> ConvertResult<Decimal> {
     Ok(value)
 }
 
-/// Convert `value` from `from` to `to`, rounding to `decimal_places` with HalfUp.
 pub fn convert(
     value: Decimal,
     from: Unit,
@@ -414,6 +735,7 @@ pub fn convert(
     let places = decimal_places.clamp(2, 6);
     let result = match from.category() {
         UnitCategory::Temperature => convert_temperature(value, from, to)?,
+        UnitCategory::Angle => convert_angle(value, from, to)?,
         _ => {
             let base = to_base(value, from)?;
             from_base(base, to)?
@@ -455,15 +777,24 @@ fn factor_to_base(unit: Unit) -> ConvertResult<Decimal> {
         Unit::Meters => Decimal::ONE,
         Unit::Centimeters => dec!(0.01),
         Unit::Millimeters => dec!(0.001),
+        Unit::Micrometers => dec!(0.000001),
         Unit::Kilometers => dec!(1000),
         Unit::Feet => dec!(0.3048),
         Unit::Inches => dec!(0.0254),
+        Unit::Yards => dec!(0.9144),
         Unit::Miles => dec!(1609.344),
+        // Area → square meters
+        Unit::SquareMeters => Decimal::ONE,
+        Unit::SquareCentimeters => dec!(0.0001),
+        Unit::SquareFeet => dec!(0.09290304),
+        Unit::SquareInches => dec!(0.00064516),
+        Unit::Acres => dec!(4046.8564224),
         // Weight → kilograms
         Unit::Kilograms => Decimal::ONE,
         Unit::Grams => dec!(0.001),
         Unit::Pounds => dec!(0.45359237),
         Unit::Ounces => dec!(0.028349523125),
+        Unit::MetricTons => dec!(1000),
         // Volume → liters
         Unit::Liters => Decimal::ONE,
         Unit::Milliliters => dec!(0.001),
@@ -471,10 +802,34 @@ fn factor_to_base(unit: Unit) -> ConvertResult<Decimal> {
         Unit::Gallons => dec!(3.785411784),
         Unit::Quarts => dec!(0.946352946),
         Unit::FluidOunces => dec!(0.0295735295625),
-        // Speed → meters per second
-        Unit::KilometersPerHour => dec!(0.2777777777777777777777777778), // 1/3.6
-        Unit::MilesPerHour => dec!(0.44704),                            // 1609.344/3600
-        Unit::Fahrenheit | Unit::Celsius | Unit::Kelvin => {
+        // Speed → m/s
+        Unit::MetersPerSecond => Decimal::ONE,
+        Unit::KilometersPerHour => dec!(0.2777777777777777777777777778),
+        Unit::MilesPerHour => dec!(0.44704),
+        Unit::FeetPerSecond => dec!(0.3048),
+        Unit::Knots => dec!(0.514444),
+        // Force → newtons
+        Unit::Newtons => Decimal::ONE,
+        Unit::Kilonewtons => dec!(1000),
+        Unit::PoundForce => dec!(4.4482216152605),
+        // Pressure → pascals
+        Unit::Pascals => Decimal::ONE,
+        Unit::Kilopascals => dec!(1000),
+        Unit::Megapascals => dec!(1000000),
+        Unit::Psi => dec!(6894.757293168),
+        Unit::Bar => dec!(100000),
+        Unit::Atmospheres => dec!(101325),
+        // Energy → joules
+        Unit::Joules => Decimal::ONE,
+        Unit::Kilojoules => dec!(1000),
+        Unit::Calories => dec!(4.184),
+        Unit::Kilocalories => dec!(4184),
+        Unit::Btu => dec!(1055.05585262),
+        // Power → watts
+        Unit::Watts => Decimal::ONE,
+        Unit::Kilowatts => dec!(1000),
+        Unit::Horsepower => dec!(745.69987158227),
+        Unit::Fahrenheit | Unit::Celsius | Unit::Kelvin | Unit::Degrees | Unit::Radians => {
             return Err(ConvertError::IncompatibleUnits);
         }
     };
@@ -505,6 +860,24 @@ fn convert_temperature(value: Decimal, from: Unit, to: Unit) -> ConvertResult<De
             .ok_or(ConvertError::Overflow),
         Unit::Kelvin => celsius
             .checked_add(dec!(273.15))
+            .ok_or(ConvertError::Overflow),
+        _ => Err(ConvertError::IncompatibleUnits),
+    }
+}
+
+fn convert_angle(value: Decimal, from: Unit, to: Unit) -> ConvertResult<Decimal> {
+    let radians = match from {
+        Unit::Radians => value,
+        Unit::Degrees => value
+            .checked_mul(deg_to_rad_factor())
+            .ok_or(ConvertError::Overflow)?,
+        _ => return Err(ConvertError::IncompatibleUnits),
+    };
+
+    match to {
+        Unit::Radians => Ok(radians),
+        Unit::Degrees => radians
+            .checked_mul(rad_to_deg_factor())
             .ok_or(ConvertError::Overflow),
         _ => Err(ConvertError::IncompatibleUnits),
     }
@@ -561,5 +934,33 @@ mod tests {
     fn parse_kph_alias() {
         let p = parse_input_expression("100 kph").unwrap();
         assert_eq!(p.unit, Some(Unit::KilometersPerHour));
+    }
+
+    #[test]
+    fn peek_unit_without_number() {
+        assert_eq!(peek_unit_from_input("mm"), Some(Unit::Millimeters));
+    }
+
+    #[test]
+    fn peek_unit_in_expression() {
+        assert_eq!(peek_unit_from_input("60 mph"), Some(Unit::MilesPerHour));
+    }
+
+    #[test]
+    fn psi_to_kpa() {
+        let out = convert(dec!(14.7), Unit::Psi, Unit::Kilopascals, 2).unwrap();
+        assert_eq!(out, dec!(101.35));
+    }
+
+    #[test]
+    fn degrees_to_radians() {
+        let out = convert(dec!(180), Unit::Degrees, Unit::Radians, 4).unwrap();
+        assert_eq!(out, pi().round_dp(4));
+    }
+
+    #[test]
+    fn newtons_to_lbf() {
+        let out = convert(dec!(1), Unit::Newtons, Unit::PoundForce, 4).unwrap();
+        assert_eq!(out, dec!(0.2248));
     }
 }

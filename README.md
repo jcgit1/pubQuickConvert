@@ -7,7 +7,7 @@ Runs on **Linux** (KDE/GNOME) and **Windows** (64-bit).
 ## Features
 
 - Imperial and Metric selectors with one **startup default** preference
-- Categories: Length, Weight, Temperature, Volume, Speed
+- Categories: Length, Area, Weight, Volume, Speed, Force, Pressure, Energy, Power, Temperature, Angle
 - Input/output unit dropdowns with **Swap Units**
 - Configurable decimal precision (2–6 places, half-up rounding)
 - Input validation (rejects scientific notation and extreme magnitudes)
