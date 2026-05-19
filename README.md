@@ -123,6 +123,14 @@ git push origin v0.1.0
 
 Workflows: `.github/workflows/ci.yml` (every push) and `.github/workflows/release.yml` (tags).
 
+**Latest release:** [v0.1.0](https://github.com/jcgit1/QuickConvert/releases/tag/v0.1.0) — includes `quickconvert-windows-x64.zip` and `quickconvert-linux-x64.tar.gz`.
+
+## TODO & feature requests
+
+See [TODO.md](TODO.md). Highlights:
+
+- Windows code signing for trusted installs (SmartScreen / enterprise policy)
+
 ## Project layout
 
 ```
