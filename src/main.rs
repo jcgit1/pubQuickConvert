@@ -115,6 +115,7 @@ fn build_ui(app: &AdwApplication) {
     let window = ApplicationWindow::builder()
         .application(app)
         .title("QuickConvert")
+        .icon_name(APP_ID)
         .default_width(380)
         .default_height(200)
         .build();

@@ -82,8 +82,10 @@ The binary is `target/release/quickconvert`.
 
 ```bash
 cargo build --release
+bash scripts/install-icons.sh
 install -Dm755 target/release/quickconvert ~/.local/bin/quickconvert
 install -Dm644 quickconvert.desktop ~/.local/share/applications/quickconvert.desktop
+update-desktop-database ~/.local/share/applications 2>/dev/null || true
 ```
 
 Ensure `~/.local/bin` is on your `PATH`.
@@ -93,6 +95,7 @@ Ensure `~/.local/bin` is on your `PATH`.
 ```bash
 cargo build --release
 sudo install -Dm755 target/release/quickconvert /usr/local/bin/quickconvert
+sudo bash scripts/install-icons.sh
 sudo install -Dm644 quickconvert.desktop /usr/local/share/applications/quickconvert.desktop
 ```
 
