@@ -14,8 +14,8 @@ use gtk4::{
 };
 use libadwaita::prelude::*;
 use libadwaita::{
-    Application as AdwApplication, ApplicationWindow, ColorScheme, HeaderBar, PreferencesGroup,
-    PreferencesPage, PreferencesWindow, ToolbarView,
+    Application as AdwApplication, ApplicationWindow, ColorScheme, HeaderBar, PreferencesDialog,
+    PreferencesGroup, PreferencesPage, ToolbarView,
 };
 
 use converter::{
@@ -74,7 +74,7 @@ struct CopyTarget {
 }
 
 struct PrefsUi {
-    window: PreferencesWindow,
+    dialog: PreferencesDialog,
     imperial: CheckButton,
     metric: CheckButton,
     precision_spin: SpinButton,
@@ -136,6 +136,11 @@ fn build_ui(app: &AdwApplication) {
     root.set_margin_start(14);
     root.set_margin_end(14);
 
+    let input_entry = Entry::builder()
+        .placeholder_text("Value (optional unit: 25 mm, 100 kPa, 180°)")
+        .build();
+    root.append(&input_entry);
+
     let category_dropdown = category_drop_down();
     let input_unit_dropdown =
         DropDown::new(Some(gtk4::StringList::new(&[])), None::<&gtk4::Expression>);
@@ -149,11 +154,6 @@ fn build_ui(app: &AdwApplication) {
     units_row.append(&swap_btn);
     units_row.append(&compact_dropdown("To", &output_unit_dropdown));
     root.append(&units_row);
-
-    let input_entry = Entry::builder()
-        .placeholder_text("Value (optional unit: 25 mm, 100 kPa, 180°)")
-        .build();
-    root.append(&input_entry);
 
     let result_label = Label::builder()
         .label("—")
@@ -412,18 +412,16 @@ fn build_ui(app: &AdwApplication) {
         let run = run.clone();
         let refresh_c = refresh.clone();
         move |_| {
-            let mut slot = prefs_ui_c.borrow_mut();
-            if slot.is_none() {
-                *slot = Some(build_preferences_window(
-                    &window_c,
+            if prefs_ui_c.borrow().is_none() {
+                prefs_ui_c.replace(Some(build_preferences_dialog(
                     state_c.clone(),
                     run.clone(),
                     refresh_c.clone(),
-                ));
+                )));
             }
-            if let Some(ref prefs) = *slot {
+            if let Some(prefs) = prefs_ui_c.borrow().as_ref() {
                 sync_preferences_from_state(&state_c, prefs);
-                prefs.window.present();
+                prefs.dialog.present(Some(&window_c));
             }
         }
     });
@@ -494,16 +492,13 @@ fn entry_selected_text(entry: &Entry) -> Option<String> {
     Some(text[start..end].iter().collect())
 }
 
-fn build_preferences_window(
-    parent: &ApplicationWindow,
+fn build_preferences_dialog(
     state: Rc<RefCell<AppState>>,
     run_conversion: Rc<dyn Fn()>,
     refresh_ui: Rc<dyn Fn()>,
 ) -> PrefsUi {
-    let prefs_window = PreferencesWindow::builder()
+    let prefs_dialog = PreferencesDialog::builder()
         .title("Preferences")
-        .transient_for(parent)
-        .modal(true)
         .build();
 
     let page = PreferencesPage::new();
@@ -550,7 +545,7 @@ fn build_preferences_window(
     display_group.add(&precision_row);
     page.add(&display_group);
 
-    prefs_window.add(&page);
+    prefs_dialog.add(&page);
 
     let save_default = {
         let state_c = state.clone();
@@ -573,7 +568,7 @@ fn build_preferences_window(
         let refresh = refresh_ui.clone();
         let save = save_default.clone();
         move |btn: &CheckButton| {
-            if !btn.is_active() {
+            if !btn.is_active() || state_c.borrow().updating_ui {
                 return;
             }
             {
@@ -594,7 +589,7 @@ fn build_preferences_window(
         let refresh = refresh_ui.clone();
         let save = save_default.clone();
         move |btn: &CheckButton| {
-            if !btn.is_active() {
+            if !btn.is_active() || state_c.borrow().updating_ui {
                 return;
             }
             {
@@ -618,6 +613,9 @@ fn build_preferences_window(
         let state_c = state.clone();
         let run = run_conversion.clone();
         move |spin| {
+            if state_c.borrow().updating_ui {
+                return;
+            }
             let mut s = state_c.borrow_mut();
             s.prefs.decimal_places = spin.value() as u32;
             s.prefs.clamp_decimal_places();
@@ -628,7 +626,7 @@ fn build_preferences_window(
     });
 
     PrefsUi {
-        window: prefs_window,
+        dialog: prefs_dialog,
         imperial,
         metric,
         precision_spin,
@@ -636,12 +634,18 @@ fn build_preferences_window(
 }
 
 fn sync_preferences_from_state(state: &Rc<RefCell<AppState>>, prefs: &PrefsUi) {
-    let s = state.borrow();
-    match s.system {
+    let (system, decimal_places) = {
+        let s = state.borrow();
+        (s.system, s.prefs.decimal_places)
+    };
+
+    state.borrow_mut().updating_ui = true;
+    match system {
         UnitSystem::Imperial => prefs.imperial.set_active(true),
         UnitSystem::Metric => prefs.metric.set_active(true),
     }
-    prefs.precision_spin.set_value(s.prefs.decimal_places as f64);
+    prefs.precision_spin.set_value(decimal_places as f64);
+    state.borrow_mut().updating_ui = false;
 }
 
 impl UiHandles {
