@@ -63,7 +63,7 @@ jobs:
         env:
           PKG_CONFIG_PATH: /mingw64/lib/pkgconfig
         run: |
-          export PATH="/mingw64/bin:$PATH"
+          export PATH="/mingw64/bin:$(cygpath -u "${CARGO_HOME}")/bin:$PATH"
           cargo build --release
           bash scripts/package-windows.sh
 
