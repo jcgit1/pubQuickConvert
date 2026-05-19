@@ -1,0 +1,6 @@
+{
+  "decimal_places": 2,
+  "default_system": "metric",
+  "default_imperial": false,
+  "default_metric": true
+}

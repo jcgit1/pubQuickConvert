@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=QuickConvert
+Comment=Imperial and metric unit converter
+Exec=quickconvert
+Icon=utilities-calculator
+Type=Application
+Categories=Utility;Calculator;
+Terminal=false
+StartupNotify=true
