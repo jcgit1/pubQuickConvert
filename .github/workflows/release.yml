@@ -1,0 +1,89 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GTK dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libadwaita-1-dev libgraphene-1.0-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Package Linux binary
+        run: |
+          mkdir -p dist
+          cp target/release/quickconvert dist/
+          cp README.md LICENSE dist/
+          tar -czf dist/quickconvert-linux-x64.tar.gz -C dist quickconvert README.md LICENSE
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quickconvert-linux-x64
+          path: dist/quickconvert-linux-x64.tar.gz
+
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msys2_mingw64: true
+          update: true
+          install: >-
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-gtk4
+            mingw-w64-x86_64-libadwaita
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable-gnu
+
+      - name: Build and package
+        env:
+          PKG_CONFIG_PATH: /mingw64/lib/pkgconfig
+        run: |
+          export PATH="/mingw64/bin:$PATH"
+          cargo build --release
+          bash scripts/package-windows.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quickconvert-windows-x64
+          path: dist/quickconvert-windows-x64.zip
+
+  release:
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/quickconvert-linux-x64/quickconvert-linux-x64.tar.gz
+            artifacts/quickconvert-windows-x64/quickconvert-windows-x64.zip
+          generate_release_notes: true

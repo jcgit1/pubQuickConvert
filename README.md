@@ -1,11 +1,13 @@
 # QuickConvert
 
-QuickConvert is a Rust + GTK4/libadwaita desktop utility for **Imperial ↔ Metric** unit conversion. It targets first-year engineering workflows: length, weight, temperature, and volume, with precise decimal arithmetic via [`rust_decimal`](https://docs.rs/rust_decimal).
+QuickConvert is a Rust + GTK4/libadwaita desktop utility for **Imperial ↔ Metric** unit conversion. It targets first-year engineering workflows: length, weight, temperature, volume, and speed, with precise decimal arithmetic via [`rust_decimal`](https://docs.rs/rust_decimal).
+
+Runs on **Linux** (KDE/GNOME) and **Windows** (64-bit).
 
 ## Features
 
-- Imperial and Metric radio selectors with persistent **Default** preference
-- Categories: Length, Weight, Temperature, Volume
+- Imperial and Metric selectors with one **startup default** preference
+- Categories: Length, Weight, Temperature, Volume, Speed
 - Input/output unit dropdowns with **Swap Units**
 - Configurable decimal precision (2–6 places, half-up rounding)
 - Input validation (rejects scientific notation and extreme magnitudes)
@@ -35,6 +37,36 @@ sudo pacman -S base-devel pkgconf gtk4 libadwaita
 ### Runtime
 
 - GTK 4 and Libadwaita 1.x
+
+### Windows (download or build)
+
+**Pre-built binaries:** see [GitHub Releases](https://github.com/jcgit1/QuickConvert/releases). Download `quickconvert-windows-x64.zip`, extract the folder, and run `quickconvert.exe`.
+
+CI builds the Windows zip automatically when a version tag is pushed (for example `v0.1.0`).
+
+**Build on Windows with MSYS2:**
+
+1. Install [MSYS2](https://www.msys2.org/) and open the **MINGW64** shell.
+2. Install dependencies:
+
+```bash
+pacman -S --needed mingw-w64-x86_64-toolchain mingw-w64-x86_64-pkgconf \
+  mingw-w64-x86_64-gtk4 mingw-w64-x86_64-libadwaita
+```
+
+3. Install Rust (GNU toolchain): https://rustup.rs/ — choose the `stable-gnu` target.
+4. Build and package:
+
+```bash
+export PKG_CONFIG_PATH=/mingw64/lib/pkgconfig
+export PATH="/mingw64/bin:$PATH"
+cargo build --release
+bash scripts/package-windows.sh
+```
+
+The portable zip is at `dist/quickconvert-windows-x64.zip`.
+
+Preferences on Windows: `%APPDATA%\com\quickconvert\QuickConvert\preferences.json`
 
 ## Build
 
@@ -79,6 +111,17 @@ sudo update-desktop-database /usr/local/share/applications
 3. Choose **Length** → input **Meters** → output **Feet**.
 4. Enter `10.99` → result `36.06` (with 2 decimal places).
 5. Preferences save automatically when you change defaults or precision.
+
+## Publishing a release (maintainers)
+
+Push a version tag; GitHub Actions builds Linux and Windows artifacts and attaches them to the release:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+Workflows: `.github/workflows/ci.yml` (every push) and `.github/workflows/release.yml` (tags).
 
 ## Project layout
 

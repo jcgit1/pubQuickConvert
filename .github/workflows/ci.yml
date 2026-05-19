@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GTK dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-4-dev libadwaita-1-dev libgraphene-1.0-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Build and test
+        run: |
+          cargo test --verbose
+          cargo build --release
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msys2_mingw64: true
+          update: true
+          install: >-
+            mingw-w64-x86_64-toolchain
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-gtk4
+            mingw-w64-x86_64-libadwaita
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable-gnu
+
+      - name: Build
+        env:
+          PKG_CONFIG_PATH: /mingw64/lib/pkgconfig
+        run: |
+          export PATH="/mingw64/bin:$PATH"
+          cargo build --release
+
+      - name: Package portable zip
+        run: bash scripts/package-windows.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quickconvert-windows-x64
+          path: dist/quickconvert-windows-x64.zip

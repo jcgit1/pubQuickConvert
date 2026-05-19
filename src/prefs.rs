@@ -48,18 +48,10 @@ pub struct Preferences {
     pub decimal_places: u32,
     #[serde(default)]
     pub default_system: DefaultSystem,
-    #[serde(default)]
-    pub default_imperial: bool,
-    #[serde(default = "default_metric_flag")]
-    pub default_metric: bool,
 }
 
 fn default_decimal_places() -> u32 {
     2
-}
-
-fn default_metric_flag() -> bool {
-    true
 }
 
 impl Default for Preferences {
@@ -67,8 +59,6 @@ impl Default for Preferences {
         Self {
             decimal_places: 2,
             default_system: DefaultSystem::Metric,
-            default_imperial: false,
-            default_metric: true,
         }
     }
 }
@@ -101,7 +91,6 @@ impl Preferences {
             let mut prefs: Self = serde_json::from_str(&raw)
                 .with_context(|| format!("Failed to parse {}", path.display()))?;
             prefs.clamp_decimal_places();
-            prefs.sync_default_flags();
             return Ok(prefs);
         }
 
@@ -122,21 +111,7 @@ impl Preferences {
         Ok(())
     }
 
-    pub fn sync_default_flags(&mut self) {
-        match self.default_system {
-            DefaultSystem::Imperial => {
-                self.default_imperial = true;
-                self.default_metric = false;
-            }
-            DefaultSystem::Metric => {
-                self.default_imperial = false;
-                self.default_metric = true;
-            }
-        }
-    }
-
     pub fn set_default_system(&mut self, system: DefaultSystem) {
         self.default_system = system;
-        self.sync_default_flags();
     }
 }

@@ -1,9 +1,13 @@
 [Desktop Entry]
+Version=1.0
+Type=Application
 Name=QuickConvert
-Comment=Imperial and metric unit converter
+GenericName=Unit Converter
+Comment=Imperial and metric unit converter for engineers
 Exec=quickconvert
 Icon=utilities-calculator
-Type=Application
 Categories=Utility;Calculator;
+Keywords=convert;units;metric;imperial;length;weight;temperature;volume;
 Terminal=false
 StartupNotify=true
+StartupWMClass=com.quickconvert.QuickConvert

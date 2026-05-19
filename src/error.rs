@@ -10,6 +10,7 @@ pub enum ConvertError {
     Underflow,
     IncompatibleUnits,
     DivisionByZero,
+    UnknownUnit(String),
 }
 
 impl fmt::Display for ConvertError {
@@ -23,6 +24,7 @@ impl fmt::Display for ConvertError {
             Self::Underflow => write!(f, "Result underflows"),
             Self::IncompatibleUnits => write!(f, "These units cannot be converted"),
             Self::DivisionByZero => write!(f, "Cannot convert with zero offset"),
+            Self::UnknownUnit(u) => write!(f, "Unknown unit: {u}"),
         }
     }
 }
