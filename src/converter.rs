@@ -963,4 +963,22 @@ mod tests {
         let out = convert(dec!(1), Unit::Newtons, Unit::PoundForce, 4).unwrap();
         assert_eq!(out, dec!(0.2248));
     }
+
+    #[test]
+    fn huge_numeric_suffix_does_not_panic() {
+        let input = format!("{} mm", "9".repeat(100_000));
+        let _ = parse_input_expression(&input);
+    }
+
+    #[test]
+    fn huge_garbage_peek_does_not_panic() {
+        let input = "x".repeat(500_000);
+        let _ = peek_unit_from_input(&input);
+    }
+
+    #[test]
+    fn rejects_extreme_magnitude() {
+        let big = format!("{} m", "9".repeat(20));
+        assert_eq!(parse_input_expression(&big), Err(ConvertError::InputTooLarge));
+    }
 }

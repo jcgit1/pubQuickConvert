@@ -40,7 +40,7 @@ sudo pacman -S base-devel pkgconf gtk4 libadwaita
 
 ### Windows (download or build)
 
-**Pre-built binaries:** see [GitHub Releases](https://github.com/jcgit1/QuickConvert/releases). Download `quickconvert-windows-x64.zip`, extract the folder, and run `quickconvert.exe`.
+**Pre-built binaries:** see [GitHub Releases](https://github.com/jcgit1/pubQuickConvert/releases). Download `quickconvert-windows-x64.zip`, extract the folder, and run `quickconvert.exe`.
 
 CI builds the Windows zip automatically when a version tag is pushed (for example `v0.1.0`).
 
@@ -126,7 +126,7 @@ git push origin v0.1.0
 
 Workflows: `.github/workflows/ci.yml` (every push) and `.github/workflows/release.yml` (tags).
 
-**Latest release:** [v0.1.0](https://github.com/jcgit1/QuickConvert/releases/tag/v0.1.0) — includes `quickconvert-windows-x64.zip` and `quickconvert-linux-x64.tar.gz`.
+**Latest release:** [v0.1.0](https://github.com/jcgit1/pubQuickConvert/releases/tag/v0.1.0) — includes `quickconvert-windows-x64.zip` and `quickconvert-linux-x64.tar.gz`.
 
 ## TODO & feature requests
 
