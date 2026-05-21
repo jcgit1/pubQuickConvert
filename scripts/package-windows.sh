@@ -57,6 +57,19 @@ in this folder; do not delete them.
 
 If Windows SmartScreen blocks the app, choose "More info" → "Run anyway"
 (we do not sign binaries yet).
+
+Performance tips (if the window lags while dragging):
+  - Use quickconvert.exe from a release build (not debug).
+  - Try setting GSK_RENDERER=ngl before launch (GPU rendering).
+  - Avoid dragging from an empty area of the title bar if the app was
+    unfocused; click the window once first, then move it.
+EOF
+
+cat > "${DIST}/quickconvert.bat" <<'EOF'
+@echo off
+setlocal
+if not defined GSK_RENDERER set GSK_RENDERER=ngl
+start "" "%~dp0quickconvert.exe"
 EOF
 
 mkdir -p dist

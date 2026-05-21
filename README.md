@@ -68,6 +68,16 @@ The portable zip is at `dist/quickconvert-windows-x64.zip`.
 
 Preferences on Windows: `%APPDATA%\com\quickconvert\QuickConvert\preferences.json`
 
+### Windows performance
+
+GTK4 apps on Windows can stutter when **dragging an unfocused window** (a known GTK issue; animations make it worse). QuickConvert mitigates this by disabling GTK animations on Windows, debouncing UI updates, and avoiding unnecessary dropdown rebuilds.
+
+If the window still feels sluggish while moving:
+
+1. Use a **release** build (`cargo build --release`), not debug.
+2. Launch via `quickconvert.bat` from the release zip (sets `GSK_RENDERER=ngl` when unset).
+3. **Click the window once** to focus it before dragging, instead of dragging immediately from the title bar.
+
 ## Build
 
 ```bash
@@ -126,7 +136,7 @@ git push origin v0.1.0
 
 Workflows: `.github/workflows/ci.yml` (every push) and `.github/workflows/release.yml` (tags).
 
-**Latest release:** [v0.1.0](https://github.com/jcgit1/pubQuickConvert/releases/tag/v0.1.0) — includes `quickconvert-windows-x64.zip` and `quickconvert-linux-x64.tar.gz`.
+**Latest release:** [v0.1.1](https://github.com/jcgit1/pubQuickConvert/releases/tag/v0.1.1) — includes `quickconvert-windows-x64.zip` and `quickconvert-linux-x64.tar.gz`.
 
 ## TODO & feature requests
 

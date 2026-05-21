@@ -1,4 +1,6 @@
 /target/
+/osxcross/
+/dist/
 **/*.rs.bk
 *.pdb
 .idea/
