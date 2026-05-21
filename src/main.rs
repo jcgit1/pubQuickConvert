@@ -152,7 +152,7 @@ fn configure_performance() {
     #[cfg(windows)]
     if let Some(settings) = gtk4::Settings::default() {
         settings.set_gtk_enable_animations(false);
-        settings.set_overlay_scrolling(false);
+        settings.set_gtk_overlay_scrolling(false);
     }
 }
 
