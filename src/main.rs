@@ -1,9 +1,16 @@
 mod converter;
 mod error;
 mod prefs;
+mod shortcut;
+
+#[cfg(target_os = "linux")]
+mod tray;
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::sync::mpsc;
+use std::sync::Arc;
+use std::time::Duration;
 
 use gtk4::gdk::{Key, ModifierType};
 use gtk4::glib::Propagation;
@@ -12,6 +19,7 @@ use gtk4::{
     Adjustment, Box as GtkBox, Button, CheckButton, DropDown, Entry, EventControllerKey, Label,
     Orientation, SpinButton,
 };
+use gtk4::gio::ApplicationFlags;
 use libadwaita::prelude::*;
 use libadwaita::{
     Application as AdwApplication, ApplicationWindow, ColorScheme, HeaderBar, PreferencesDialog,
@@ -68,6 +76,11 @@ struct UiHandles {
     output_unit_dropdown: DropDown,
 }
 
+struct WindowHandles {
+    window: ApplicationWindow,
+    input_entry: Entry,
+}
+
 struct CopyTarget {
     input_entry: Entry,
     result_text: Rc<RefCell<String>>,
@@ -78,12 +91,45 @@ struct PrefsUi {
     imperial: CheckButton,
     metric: CheckButton,
     precision_spin: SpinButton,
+    minimize_to_tray: CheckButton,
+    shortcut_enabled: CheckButton,
+    shortcut_label: Label,
+    shortcut_button: Button,
 }
 
 fn main() {
-    let app = AdwApplication::builder().application_id(APP_ID).build();
+    let app = AdwApplication::builder()
+        .application_id(APP_ID)
+        .flags(ApplicationFlags::HANDLES_COMMAND_LINE)
+        .build();
+
+    let window_handles: Rc<RefCell<Option<WindowHandles>>> = Rc::new(RefCell::new(None));
+
     app.connect_startup(|app| configure_color_scheme(app));
-    app.connect_activate(build_ui);
+
+    app.connect_command_line({
+        let window_handles = window_handles.clone();
+        move |app, cmdline| {
+            let show = cmdline
+                .arguments()
+                .iter()
+                .any(|arg| arg.to_string_lossy() == "--show");
+            if show {
+                if let Some(handles) = window_handles.borrow().as_ref() {
+                    present_main_window(&handles.window, &handles.input_entry);
+                    return 0;
+                }
+            }
+            app.activate();
+            0
+        }
+    });
+
+    app.connect_activate({
+        let window_handles = window_handles.clone();
+        move |app| build_ui(app, &window_handles)
+    });
+
     app.run();
 }
 
@@ -108,8 +154,24 @@ fn configure_color_scheme(app: &AdwApplication) {
     }
 }
 
-fn build_ui(app: &AdwApplication) {
+fn build_ui(app: &AdwApplication, window_handles: &Rc<RefCell<Option<WindowHandles>>>) {
+    if let Some(handles) = window_handles.borrow().as_ref() {
+        present_main_window(&handles.window, &handles.input_entry);
+        return;
+    }
+
     let prefs = Preferences::load().unwrap_or_default();
+
+    #[cfg(target_os = "linux")]
+    {
+        if shortcut::is_kde_session() {
+            let _ = shortcut::apply_global_shortcut(
+                prefs.global_shortcut_enabled,
+                &prefs.global_shortcut,
+            );
+        }
+    }
+
     let state = Rc::new(RefCell::new(AppState::new(prefs)));
 
     let window = ApplicationWindow::builder()
@@ -137,7 +199,7 @@ fn build_ui(app: &AdwApplication) {
     root.set_margin_end(14);
 
     let input_entry = Entry::builder()
-        .placeholder_text("Value (optional unit: 25 mm, 100 kPa, 180°)")
+        .placeholder_text("Value (optional unit: 25 mm, 5', 36\", 180°)")
         .build();
     root.append(&input_entry);
 
@@ -426,6 +488,21 @@ fn build_ui(app: &AdwApplication) {
         }
     });
 
+    attach_escape_minimize(&window, &state, &prefs_ui);
+
+    window.connect_close_request({
+        let window_c = window.clone();
+        let state_c = state.clone();
+        move |_| {
+            if state_c.borrow().prefs.minimize_to_tray {
+                window_c.set_visible(false);
+                Propagation::Stop
+            } else {
+                Propagation::Proceed
+            }
+        }
+    });
+
     window.connect_map({
         let input_entry_c = input_entry.clone();
         move |_| focus_and_select_entry(&input_entry_c)
@@ -436,7 +513,63 @@ fn build_ui(app: &AdwApplication) {
         move || focus_and_select_entry(&input_entry_c)
     });
 
+    *window_handles.borrow_mut() = Some(WindowHandles {
+        window: window.clone(),
+        input_entry: input_entry.clone(),
+    });
+
+    #[cfg(target_os = "linux")]
+    spawn_system_tray(app, window_handles);
+
     window.present();
+}
+
+#[cfg(target_os = "linux")]
+fn spawn_system_tray(app: &AdwApplication, window_handles: &Rc<RefCell<Option<WindowHandles>>>) {
+    let (show_tx, show_rx) = mpsc::channel();
+    let (quit_tx, quit_rx) = mpsc::channel();
+
+    {
+        let window_handles = window_handles.clone();
+        gtk4::glib::timeout_add_local(Duration::from_millis(50), move || {
+            while show_rx.try_recv().is_ok() {
+                if let Some(handles) = window_handles.borrow().as_ref() {
+                    present_main_window(&handles.window, &handles.input_entry);
+                }
+            }
+            gtk4::glib::ControlFlow::Continue
+        });
+    }
+
+    {
+        let app = app.clone();
+        gtk4::glib::timeout_add_local(Duration::from_millis(50), move || {
+            while quit_rx.try_recv().is_ok() {
+                app.quit();
+            }
+            gtk4::glib::ControlFlow::Continue
+        });
+    }
+
+    let show = Arc::new(move || {
+        let _ = show_tx.send(());
+    });
+    let quit = Arc::new(move || {
+        let _ = quit_tx.send(());
+    });
+
+    std::thread::spawn(move || {
+        let _handle = tray::QuickConvertTray::spawn(tray::TrayCallbacks { show, quit });
+        loop {
+            std::thread::park();
+        }
+    });
+}
+
+fn present_main_window(window: &ApplicationWindow, input_entry: &Entry) {
+    window.set_visible(true);
+    window.present();
+    focus_and_select_entry(input_entry);
 }
 
 fn focus_and_select_entry(entry: &Entry) {
@@ -474,6 +607,37 @@ fn attach_copy_shortcut(window: &ApplicationWindow, target: &CopyTarget) {
             }
         }
         Propagation::Stop
+    });
+    window.add_controller(key_ctrl);
+}
+
+fn attach_escape_minimize(
+    window: &ApplicationWindow,
+    state: &Rc<RefCell<AppState>>,
+    prefs_ui: &Rc<RefCell<Option<PrefsUi>>>,
+) {
+    let window_c = window.clone();
+    let state_c = state.clone();
+    let prefs_ui_c = prefs_ui.clone();
+
+    let key_ctrl = EventControllerKey::new();
+    key_ctrl.connect_key_pressed(move |_, key, _, _| {
+        if key != Key::Escape {
+            return Propagation::Proceed;
+        }
+
+        if let Some(prefs) = prefs_ui_c.borrow().as_ref() {
+            if prefs.dialog.is_visible() {
+                return Propagation::Proceed;
+            }
+        }
+
+        if state_c.borrow().prefs.minimize_to_tray {
+            window_c.set_visible(false);
+            Propagation::Stop
+        } else {
+            Propagation::Proceed
+        }
     });
     window.add_controller(key_ctrl);
 }
@@ -545,7 +709,61 @@ fn build_preferences_dialog(
     display_group.add(&precision_row);
     page.add(&display_group);
 
+    let behavior_group = PreferencesGroup::new();
+    behavior_group.set_title("Behavior");
+
+    let minimize_to_tray =
+        CheckButton::with_label("Minimize to system tray when closing or pressing Esc");
+    minimize_to_tray.set_margin_start(12);
+    minimize_to_tray.set_active(state.borrow().prefs.minimize_to_tray);
+    behavior_group.add(&minimize_to_tray);
+    page.add(&behavior_group);
+
+    let shortcut_group = PreferencesGroup::new();
+    shortcut_group.set_title("Global shortcut");
+
+    let shortcut_enabled =
+        CheckButton::with_label("Enable keyboard shortcut to show QuickConvert");
+    shortcut_enabled.set_margin_start(12);
+    shortcut_enabled.set_active(state.borrow().prefs.global_shortcut_enabled);
+    shortcut_enabled.set_sensitive(shortcut::is_kde_session());
+    shortcut_group.add(&shortcut_enabled);
+
+    let shortcut_row = GtkBox::new(Orientation::Horizontal, 12);
+    shortcut_row.set_margin_start(12);
+    shortcut_row.set_margin_end(12);
+
+    let shortcut_label = Label::new(Some(&state.borrow().prefs.global_shortcut));
+    shortcut_label.set_halign(gtk4::Align::Start);
+    shortcut_label.set_hexpand(true);
+
+    let shortcut_button = Button::with_label("Change…");
+    shortcut_button.set_sensitive(
+        shortcut::is_kde_session() && state.borrow().prefs.global_shortcut_enabled,
+    );
+
+    shortcut_row.append(&shortcut_label);
+    shortcut_row.append(&shortcut_button);
+    shortcut_group.add(&shortcut_row);
+
+    if !shortcut::is_kde_session() {
+        let hint = Label::new(Some(
+            "Global shortcuts require KDE Plasma. Copy quickconvert.desktop to \
+             ~/.local/share/kglobalaccel/ to register the shortcut.",
+        ));
+        hint.set_wrap(true);
+        hint.set_margin_start(12);
+        hint.set_margin_end(12);
+        hint.add_css_class("dim-label");
+        shortcut_group.add(&hint);
+    }
+
+    page.add(&shortcut_group);
+
     prefs_dialog.add(&page);
+
+    let shortcut_capture = Rc::new(RefCell::new(false));
+    let shortcut_key_ctrl = EventControllerKey::new();
 
     let save_default = {
         let state_c = state.clone();
@@ -625,18 +843,112 @@ fn build_preferences_dialog(
         }
     });
 
+    minimize_to_tray.connect_toggled({
+        let state_c = state.clone();
+        move |btn| {
+            if state_c.borrow().updating_ui {
+                return;
+            }
+            let mut s = state_c.borrow_mut();
+            s.prefs.minimize_to_tray = btn.is_active();
+            let _ = s.prefs.save();
+        }
+    });
+
+    shortcut_enabled.connect_toggled({
+        let state_c = state.clone();
+        let shortcut_button_c = shortcut_button.clone();
+        let shortcut_label_c = shortcut_label.clone();
+        move |btn| {
+            if state_c.borrow().updating_ui {
+                return;
+            }
+            let enabled = btn.is_active();
+            shortcut_button_c.set_sensitive(enabled && shortcut::is_kde_session());
+            let (enabled_pref, shortcut) = {
+                let mut s = state_c.borrow_mut();
+                s.prefs.global_shortcut_enabled = enabled;
+                let shortcut = s.prefs.global_shortcut.clone();
+                let _ = s.prefs.save();
+                (enabled, shortcut)
+            };
+            let _ = shortcut::apply_global_shortcut(enabled_pref, &shortcut);
+            shortcut_label_c.set_text(&shortcut);
+        }
+    });
+
+    shortcut_button.connect_clicked({
+        let shortcut_capture_c = shortcut_capture.clone();
+        let shortcut_button_c = shortcut_button.clone();
+        move |_| {
+            *shortcut_capture_c.borrow_mut() = true;
+            shortcut_button_c.set_label("Press keys…");
+        }
+    });
+
+    shortcut_key_ctrl.connect_key_pressed({
+        let state_c = state.clone();
+        let shortcut_capture_c = shortcut_capture.clone();
+        let shortcut_label_c = shortcut_label.clone();
+        let shortcut_button_c = shortcut_button.clone();
+        move |_, key, _, modifiers| {
+            if !*shortcut_capture_c.borrow() {
+                return Propagation::Proceed;
+            }
+
+            if key == Key::Escape {
+                *shortcut_capture_c.borrow_mut() = false;
+                shortcut_button_c.set_label("Change…");
+                return Propagation::Stop;
+            }
+
+            if is_modifier_key(key) {
+                return Propagation::Stop;
+            }
+
+            let Some(combo) = format_global_shortcut(key, modifiers) else {
+                return Propagation::Stop;
+            };
+
+            *shortcut_capture_c.borrow_mut() = false;
+            shortcut_button_c.set_label("Change…");
+            shortcut_label_c.set_text(&combo);
+
+            let enabled = {
+                let mut s = state_c.borrow_mut();
+                s.prefs.global_shortcut = combo.clone();
+                let enabled = s.prefs.global_shortcut_enabled;
+                let _ = s.prefs.save();
+                enabled
+            };
+            let _ = shortcut::apply_global_shortcut(enabled, &combo);
+            Propagation::Stop
+        }
+    });
+    prefs_dialog.add_controller(shortcut_key_ctrl);
+
     PrefsUi {
         dialog: prefs_dialog,
         imperial,
         metric,
         precision_spin,
+        minimize_to_tray,
+        shortcut_enabled,
+        shortcut_label,
+        shortcut_button,
     }
 }
 
 fn sync_preferences_from_state(state: &Rc<RefCell<AppState>>, prefs: &PrefsUi) {
-    let (system, decimal_places) = {
+    let (system, decimal_places, minimize_to_tray, shortcut_enabled, shortcut) = {
         let s = state.borrow();
-        (s.system, s.prefs.decimal_places)
+        (
+            s.system,
+            s.prefs.decimal_places,
+            s.prefs.minimize_to_tray,
+            s.prefs.global_shortcut_enabled,
+            s.prefs.global_shortcut.clone(),
+        )
     };
 
     state.borrow_mut().updating_ui = true;
@@ -645,6 +957,12 @@ fn sync_preferences_from_state(state: &Rc<RefCell<AppState>>, prefs: &PrefsUi) {
         UnitSystem::Metric => prefs.metric.set_active(true),
     }
     prefs.precision_spin.set_value(decimal_places as f64);
+    prefs.minimize_to_tray.set_active(minimize_to_tray);
+    prefs.shortcut_enabled.set_active(shortcut_enabled);
+    prefs.shortcut_label.set_text(&shortcut);
+    prefs
+        .shortcut_button
+        .set_sensitive(shortcut_enabled && shortcut::is_kde_session());
     state.borrow_mut().updating_ui = false;
 }
 
@@ -741,4 +1059,50 @@ fn auto_output_unit(input: Unit) -> Unit {
         .copied()
         .find(|u| u.system() != input.system())
         .unwrap_or(paired)
+}
+
+fn is_modifier_key(key: Key) -> bool {
+    matches!(
+        key,
+        Key::Shift_L
+            | Key::Shift_R
+            | Key::Control_L
+            | Key::Control_R
+            | Key::Alt_L
+            | Key::Alt_R
+            | Key::Meta_L
+            | Key::Meta_R
+            | Key::Super_L
+            | Key::Super_R
+            | Key::Hyper_L
+            | Key::Hyper_R
+    )
+}
+
+fn format_global_shortcut(key: Key, modifiers: ModifierType) -> Option<String> {
+    let key_name = key.name()?.to_string();
+    if key_name.is_empty() || key_name == "VoidSymbol" {
+        return None;
+    }
+
+    let mut parts = Vec::new();
+    if modifiers.contains(ModifierType::CONTROL_MASK) {
+        parts.push("Ctrl");
+    }
+    if modifiers.contains(ModifierType::SHIFT_MASK) {
+        parts.push("Shift");
+    }
+    if modifiers.contains(ModifierType::ALT_MASK) {
+        parts.push("Alt");
+    }
+    if modifiers.contains(ModifierType::META_MASK) {
+        parts.push("Meta");
+    }
+
+    if parts.is_empty() {
+        return None;
+    }
+
+    parts.push(key_name.as_str());
+    Some(parts.join("+"))
 }

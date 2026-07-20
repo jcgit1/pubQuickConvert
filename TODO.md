@@ -16,3 +16,5 @@ Track planned work and ideas. Open a GitHub issue to discuss or claim an item.
 - [x] Linux (KDE) desktop entry and GTK4/libadwaita UI
 - [x] Windows portable zip via GitHub Actions (MSYS2 / GTK4)
 - [x] GitHub Releases on version tags
+- [x] System tray + minimize on close / Esc (Linux)
+- [x] KDE global shortcut (Meta+Shift+C)

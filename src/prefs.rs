@@ -48,10 +48,28 @@ pub struct Preferences {
     pub decimal_places: u32,
     #[serde(default)]
     pub default_system: DefaultSystem,
+    #[serde(default = "default_minimize_to_tray")]
+    pub minimize_to_tray: bool,
+    #[serde(default = "default_global_shortcut_enabled")]
+    pub global_shortcut_enabled: bool,
+    #[serde(default = "default_global_shortcut")]
+    pub global_shortcut: String,
 }
 
 fn default_decimal_places() -> u32 {
     2
+}
+
+fn default_minimize_to_tray() -> bool {
+    true
+}
+
+fn default_global_shortcut_enabled() -> bool {
+    true
+}
+
+fn default_global_shortcut() -> String {
+    "Meta+Shift+C".to_string()
 }
 
 impl Default for Preferences {
@@ -59,6 +77,9 @@ impl Default for Preferences {
         Self {
             decimal_places: 2,
             default_system: DefaultSystem::Metric,
+            minimize_to_tray: default_minimize_to_tray(),
+            global_shortcut_enabled: default_global_shortcut_enabled(),
+            global_shortcut: default_global_shortcut(),
         }
     }
 }

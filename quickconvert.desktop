@@ -11,3 +11,10 @@ Keywords=convert;units;metric;imperial;length;weight;temperature;volume;
 Terminal=false
 StartupNotify=true
 StartupWMClass=com.quickconvert.QuickConvert
+Actions=show;
+
+[Desktop Action show]
+Name=Show QuickConvert
+Exec=quickconvert --show
+Icon=com.quickconvert.QuickConvert
+X-KDE-Shortcuts=Meta+Shift+C

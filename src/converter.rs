@@ -487,8 +487,13 @@ const UNIT_ALIASES: &[(&str, Unit)] = &[
     ("grams", Unit::Grams),
     ("inch", Unit::Inches),
     ("inches", Unit::Inches),
+    ("″", Unit::Inches),
+    ("\"", Unit::Inches),
     ("foot", Unit::Feet),
     ("feet", Unit::Feet),
+    ("′", Unit::Feet),
+    ("'", Unit::Feet),
+    ("\u{2019}", Unit::Feet),
     ("yard", Unit::Yards),
     ("yards", Unit::Yards),
     ("mile", Unit::Miles),
@@ -924,6 +929,34 @@ mod tests {
     }
 
     #[test]
+    fn parse_inch_double_quote_symbol() {
+        let p = parse_input_expression("36\"").unwrap();
+        assert_eq!(p.value, dec!(36));
+        assert_eq!(p.unit, Some(Unit::Inches));
+    }
+
+    #[test]
+    fn parse_feet_apostrophe_symbol() {
+        let p = parse_input_expression("10'").unwrap();
+        assert_eq!(p.value, dec!(10));
+        assert_eq!(p.unit, Some(Unit::Feet));
+    }
+
+    #[test]
+    fn parse_typographic_prime_symbols() {
+        let inches = parse_input_expression("12″").unwrap();
+        assert_eq!(inches.unit, Some(Unit::Inches));
+        let feet = parse_input_expression("8′").unwrap();
+        assert_eq!(feet.unit, Some(Unit::Feet));
+    }
+
+    #[test]
+    fn peek_inch_and_foot_symbols() {
+        assert_eq!(peek_unit_from_input("36\""), Some(Unit::Inches));
+        assert_eq!(peek_unit_from_input("5'"), Some(Unit::Feet));
+    }
+
+    #[test]
     fn mph_to_kph() {
         let p = parse_input_expression("60 mph").unwrap();
         let out = convert(p.value, Unit::MilesPerHour, Unit::KilometersPerHour, 2).unwrap();
@@ -962,5 +995,23 @@ mod tests {
     fn newtons_to_lbf() {
         let out = convert(dec!(1), Unit::Newtons, Unit::PoundForce, 4).unwrap();
         assert_eq!(out, dec!(0.2248));
+    }
+
+    #[test]
+    fn huge_numeric_suffix_does_not_panic() {
+        let input = format!("{} mm", "9".repeat(100_000));
+        let _ = parse_input_expression(&input);
+    }
+
+    #[test]
+    fn huge_garbage_peek_does_not_panic() {
+        let input = "x".repeat(500_000);
+        let _ = peek_unit_from_input(&input);
+    }
+
+    #[test]
+    fn rejects_extreme_magnitude() {
+        let big = format!("{} m", "9".repeat(20));
+        assert_eq!(parse_input_expression(&big), Err(ConvertError::InputTooLarge));
     }
 }

@@ -13,13 +13,16 @@ Runs on **Linux** (KDE/GNOME) and **Windows** (64-bit).
 - Input validation (rejects scientific notation and extreme magnitudes)
 - Preferences stored in `~/.config/quickconvert/preferences.json`
 - KDE application menu entry via `.desktop` file
+- **System tray** on Linux (KDE StatusNotifierItem; Wayland and X11)
+- **Minimize to tray** when closing or pressing **Esc** (default; toggle in Preferences)
+- **Global keyboard shortcut** on KDE Plasma (default **Meta+Shift+C**; configurable in Preferences)
 
 ## Requirements
 
 ### Build dependencies (Debian/Ubuntu)
 
 ```bash
-sudo apt install build-essential pkg-config libgtk-4-dev libadwaita-1-dev
+sudo apt install build-essential pkg-config libgtk-4-dev libadwaita-1-dev libdbus-1-dev
 ```
 
 ### Build dependencies (Fedora)
@@ -85,8 +88,12 @@ cargo build --release
 bash scripts/install-icons.sh
 install -Dm755 target/release/quickconvert ~/.local/bin/quickconvert
 install -Dm644 quickconvert.desktop ~/.local/share/applications/quickconvert.desktop
+install -Dm644 quickconvert.desktop ~/.local/share/kglobalaccel/com.quickconvert.QuickConvert.desktop
 update-desktop-database ~/.local/share/applications 2>/dev/null || true
+kbuildsycoca6 --noincremental 2>/dev/null || true
 ```
+
+The copy under `kglobalaccel/` registers the global shortcut (default **Meta+Shift+C**) with KDE Plasma. Change it in app **Preferences → Global shortcut** or in System Settings → Keyboard → Shortcuts.
 
 Ensure `~/.local/bin` is on your `PATH`.
 
@@ -97,6 +104,8 @@ cargo build --release
 sudo install -Dm755 target/release/quickconvert /usr/local/bin/quickconvert
 sudo bash scripts/install-icons.sh
 sudo install -Dm644 quickconvert.desktop /usr/local/share/applications/quickconvert.desktop
+sudo install -Dm644 quickconvert.desktop /usr/local/share/kglobalaccel/com.quickconvert.QuickConvert.desktop
+sudo kbuildsycoca6 --noincremental 2>/dev/null || true
 ```
 
 Update the desktop database (optional):
@@ -126,7 +135,7 @@ git push origin v0.1.0
 
 Workflows: `.github/workflows/ci.yml` (every push) and `.github/workflows/release.yml` (tags).
 
-**Latest release:** [v0.1.0](https://github.com/jcgit1/QuickConvert/releases/tag/v0.1.0) — includes `quickconvert-windows-x64.zip` and `quickconvert-linux-x64.tar.gz`.
+**Latest release:** [v0.1.1](https://github.com/jcgit1/QuickConvert/releases/tag/v0.1.1) — includes `quickconvert-windows-x64.zip` and `quickconvert-linux-x64.tar.gz`.
 
 ## TODO & feature requests
 
@@ -148,6 +157,8 @@ QuickConvert/
     ├── main.rs             # GTK4 / libadwaita UI
     ├── converter.rs        # pure conversion logic
     ├── prefs.rs            # preferences load/save
+    ├── tray.rs             # KDE system tray (Linux)
+    ├── shortcut.rs         # KDE global shortcut (Linux)
     └── error.rs            # user-facing errors
 ```
 

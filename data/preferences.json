@@ -1,4 +1,7 @@
 {
   "decimal_places": 2,
-  "default_system": "metric"
+  "default_system": "metric",
+  "minimize_to_tray": true,
+  "global_shortcut_enabled": true,
+  "global_shortcut": "Meta+Shift+C"
 }

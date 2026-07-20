@@ -1,6 +1,6 @@
 [package]
 name = "quickconvert"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Imperial ↔ Metric unit converter for engineers"
 license = "AGPL-3.0-or-later"
@@ -19,3 +19,6 @@ rust_decimal = { version = "1", features = ["serde-with-str"] }
 rust_decimal_macros = "1"
 anyhow = "1"
 directories = "5"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+ksni = { version = "0.3", default-features = false, features = ["blocking", "async-io"] }
