@@ -6,6 +6,7 @@ mod shortcut;
 #[cfg(target_os = "linux")]
 mod tray;
 
+use rust_decimal::Decimal;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::mpsc;
@@ -13,13 +14,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use gtk4::gdk::{Key, ModifierType};
+use gtk4::gio::ApplicationFlags;
 use gtk4::glib::Propagation;
 use gtk4::prelude::*;
 use gtk4::{
     Adjustment, Box as GtkBox, Button, CheckButton, DropDown, Entry, EventControllerKey, Label,
     Orientation, SpinButton,
 };
-use gtk4::gio::ApplicationFlags;
 use libadwaita::prelude::*;
 use libadwaita::{
     Application as AdwApplication, ApplicationWindow, ColorScheme, HeaderBar, PreferencesDialog,
@@ -27,8 +28,8 @@ use libadwaita::{
 };
 
 use converter::{
-    convert, format_decimal, parse_input_expression, peek_unit_from_input, Unit, UnitCategory,
-    UnitSystem,
+    convert_pair, format_decimal, parse_optional_expression, peek_unit_from_input, ParsedInput,
+    Unit, UnitCategory, UnitSystem,
 };
 use prefs::{DefaultSystem, Preferences};
 
@@ -41,7 +42,7 @@ struct AppState {
     output_unit: Unit,
     system: UnitSystem,
     updating_ui: bool,
-    input_focused: bool,
+    input_focus: InputFocus,
     category_options: Vec<UnitCategory>,
     from_options: Vec<Unit>,
     to_options: Vec<Unit>,
@@ -62,7 +63,7 @@ impl AppState {
             output_unit,
             system,
             updating_ui: false,
-            input_focused: false,
+            input_focus: InputFocus::None,
             category_options: UnitCategory::ALL.to_vec(),
             from_options,
             to_options,
@@ -81,8 +82,16 @@ struct WindowHandles {
     input_entry: Entry,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum InputFocus {
+    None,
+    Primary,
+    Secondary,
+}
+
 struct CopyTarget {
     input_entry: Entry,
+    second_entry: Entry,
     result_text: Rc<RefCell<String>>,
 }
 
@@ -178,7 +187,7 @@ fn build_ui(app: &AdwApplication, window_handles: &Rc<RefCell<Option<WindowHandl
         .application(app)
         .title("QuickConvert")
         .icon_name(APP_ID)
-        .default_width(380)
+        .default_width(480)
         .default_height(200)
         .build();
 
@@ -199,16 +208,35 @@ fn build_ui(app: &AdwApplication, window_handles: &Rc<RefCell<Option<WindowHandl
     root.set_margin_end(14);
 
     let input_entry = Entry::builder()
-        .placeholder_text("Value (optional unit: 25 mm, 5', 36\", 180°)")
+        .placeholder_text("8.5\"  or  5'  or  25 mm")
+        .tooltip_text("First dimension. \" is inches, ' is feet.")
+        .hexpand(true)
         .build();
-    root.append(&input_entry);
+    let times_label = Label::new(Some("×"));
+    times_label.add_css_class("dim-label");
+    times_label.set_valign(gtk4::Align::Center);
+    let input_entry_2 = Entry::builder()
+        .placeholder_text("11\"  (optional)")
+        .tooltip_text(
+            "Second dimension. Leave blank for a single value. 8.5\" × 11\" is letter size.",
+        )
+        .hexpand(true)
+        .build();
+    let input_row = GtkBox::new(Orientation::Horizontal, 6);
+    input_row.append(&input_entry);
+    input_row.append(&times_label);
+    input_row.append(&input_entry_2);
+    root.append(&input_row);
 
     let category_dropdown = category_drop_down();
     let input_unit_dropdown =
         DropDown::new(Some(gtk4::StringList::new(&[])), None::<&gtk4::Expression>);
     let output_unit_dropdown =
         DropDown::new(Some(gtk4::StringList::new(&[])), None::<&gtk4::Expression>);
-    let swap_btn = Button::builder().label("⇄").tooltip_text("Swap units").build();
+    let swap_btn = Button::builder()
+        .label("⇄")
+        .tooltip_text("Swap units")
+        .build();
 
     let units_row = GtkBox::new(Orientation::Horizontal, 6);
     units_row.append(&compact_dropdown("Type", &category_dropdown));
@@ -239,6 +267,7 @@ fn build_ui(app: &AdwApplication, window_handles: &Rc<RefCell<Option<WindowHandl
     let result_text = Rc::new(RefCell::new(String::from("—")));
     let copy_target = CopyTarget {
         input_entry: input_entry.clone(),
+        second_entry: input_entry_2.clone(),
         result_text: result_text.clone(),
     };
 
@@ -252,11 +281,13 @@ fn build_ui(app: &AdwApplication, window_handles: &Rc<RefCell<Option<WindowHandl
         let state_c = state.clone();
         let ui_c = ui.clone_handles();
         let input_entry_c = input_entry.clone();
+        let input_entry_2_c = input_entry_2.clone();
         move || {
             let text = input_entry_c.text().to_string();
+            let text_2 = input_entry_2_c.text().to_string();
             let (category, input_unit, output_unit, cat_opts, from_opts, to_opts) = {
                 let mut s = state_c.borrow_mut();
-                apply_input_filters(&text, &mut s);
+                apply_input_filters(&text, &text_2, &mut s);
                 (
                     s.category,
                     s.input_unit,
@@ -279,60 +310,56 @@ fn build_ui(app: &AdwApplication, window_handles: &Rc<RefCell<Option<WindowHandl
     let run_conversion: Rc<dyn Fn()> = Rc::new({
         let state_c = state.clone();
         let input_entry_c = input_entry.clone();
+        let input_entry_2_c = input_entry_2.clone();
         let result_label_c = result_label.clone();
         let error_label_c = error_label.clone();
         let result_text_c = result_text.clone();
         let refresh_ui_c = refresh_ui.clone();
         move || {
             let text = input_entry_c.text().to_string();
-            if text.trim().is_empty() {
-                result_label_c.set_text("—");
-                *result_text_c.borrow_mut() = "—".to_string();
-                error_label_c.set_text("");
-                return;
-            }
+            let text_2 = input_entry_2_c.text().to_string();
 
-            let parsed = match parse_input_expression(&text) {
-                Ok(p) => p,
+            let primary = match parse_optional_expression(&text) {
+                Ok(value) => value,
                 Err(e) => {
-                    result_label_c.set_text("—");
-                    *result_text_c.borrow_mut() = String::new();
-                    error_label_c.set_text(&e.to_string());
+                    show_convert_error(&result_label_c, &error_label_c, &result_text_c, &e);
+                    return;
+                }
+            };
+            let secondary = match parse_optional_expression(&text_2) {
+                Ok(value) => value,
+                Err(e) => {
+                    show_convert_error(&result_label_c, &error_label_c, &result_text_c, &e);
                     return;
                 }
             };
 
+            let Some((first, second)) = pair_inputs(primary, secondary) else {
+                result_label_c.set_text("—");
+                *result_text_c.borrow_mut() = "—".to_string();
+                error_label_c.set_text("");
+                return;
+            };
+
             let (from_unit, to_unit, places) = {
                 let mut s = state_c.borrow_mut();
-                if let Some(u) = parsed.unit {
-                    s.input_unit = u;
-                    s.category = u.category();
-                    s.output_unit = auto_output_unit(u);
+                if let Some(detected) = first.unit.or(second.as_ref().and_then(|dim| dim.unit)) {
+                    assign_detected_unit(&mut s, detected);
                 }
-                (
-                    s.input_unit,
-                    s.output_unit,
-                    s.prefs.decimal_places,
-                )
+                (s.input_unit, s.output_unit, s.prefs.decimal_places)
             };
 
             refresh_ui_c();
 
-            match convert(parsed.value, from_unit, to_unit, places) {
-                Ok(result) => {
-                    let display = format!(
-                        "{} {}",
-                        format_decimal(result, places),
-                        to_unit.short_suffix()
-                    );
+            match convert_pair(&first, second.as_ref(), from_unit, to_unit, places) {
+                Ok((result, second_result)) => {
+                    let display = format_conversion(result, second_result, to_unit, places);
                     result_label_c.set_text(&display);
                     *result_text_c.borrow_mut() = display;
                     error_label_c.set_text("");
                 }
                 Err(e) => {
-                    result_label_c.set_text("—");
-                    *result_text_c.borrow_mut() = String::new();
-                    error_label_c.set_text(&e.to_string());
+                    show_convert_error(&result_label_c, &error_label_c, &result_text_c, &e);
                 }
             }
         }
@@ -438,32 +465,24 @@ fn build_ui(app: &AdwApplication, window_handles: &Rc<RefCell<Option<WindowHandl
         }
     });
 
-    let focus_ctrl = gtk4::EventControllerFocus::new();
-    focus_ctrl.connect_enter({
-        let state_c = state.clone();
-        let refresh_c = refresh_ui.clone();
-        move |_| {
-            state_c.borrow_mut().input_focused = true;
-            refresh_c();
-        }
-    });
-    focus_ctrl.connect_leave({
-        let state_c = state.clone();
-        let refresh_c = refresh_ui.clone();
-        move |_| {
-            state_c.borrow_mut().input_focused = false;
-            refresh_c();
-        }
-    });
-    input_entry.add_controller(focus_ctrl);
+    track_input_focus(&input_entry, InputFocus::Primary, &state, &refresh_ui);
+    track_input_focus(&input_entry_2, InputFocus::Secondary, &state, &refresh_ui);
 
-    input_entry.connect_changed({
+    let on_input_changed: Rc<dyn Fn()> = Rc::new({
         let run = run.clone();
         let refresh_c = refresh_ui.clone();
-        move |_| {
+        move || {
             refresh_c();
             run();
         }
+    });
+    input_entry.connect_changed({
+        let on_input_changed = on_input_changed.clone();
+        move |_| on_input_changed()
+    });
+    input_entry_2.connect_changed({
+        let on_input_changed = on_input_changed.clone();
+        move |_| on_input_changed()
     });
 
     let prefs_ui = Rc::new(RefCell::new(None::<PrefsUi>));
@@ -580,6 +599,7 @@ fn focus_and_select_entry(entry: &Entry) {
 
 fn attach_copy_shortcut(window: &ApplicationWindow, target: &CopyTarget) {
     let input_entry = target.input_entry.clone();
+    let second_entry = target.second_entry.clone();
     let result_text = target.result_text.clone();
 
     let key_ctrl = EventControllerKey::new();
@@ -591,12 +611,14 @@ fn attach_copy_shortcut(window: &ApplicationWindow, target: &CopyTarget) {
             return Propagation::Proceed;
         }
 
-        if input_entry.has_focus() {
-            if let Some(selected) = entry_selected_text(&input_entry) {
-                if let Some(display) = gtk4::gdk::Display::default() {
-                    display.clipboard().set_text(&selected);
+        for entry in [&input_entry, &second_entry] {
+            if entry.has_focus() {
+                if let Some(selected) = entry_selected_text(entry) {
+                    if let Some(display) = gtk4::gdk::Display::default() {
+                        display.clipboard().set_text(&selected);
+                    }
+                    return Propagation::Stop;
                 }
-                return Propagation::Stop;
             }
         }
 
@@ -661,9 +683,7 @@ fn build_preferences_dialog(
     run_conversion: Rc<dyn Fn()>,
     refresh_ui: Rc<dyn Fn()>,
 ) -> PrefsUi {
-    let prefs_dialog = PreferencesDialog::builder()
-        .title("Preferences")
-        .build();
+    let prefs_dialog = PreferencesDialog::builder().title("Preferences").build();
 
     let page = PreferencesPage::new();
     page.set_title("General");
@@ -722,8 +742,7 @@ fn build_preferences_dialog(
     let shortcut_group = PreferencesGroup::new();
     shortcut_group.set_title("Global shortcut");
 
-    let shortcut_enabled =
-        CheckButton::with_label("Enable keyboard shortcut to show QuickConvert");
+    let shortcut_enabled = CheckButton::with_label("Enable keyboard shortcut to show QuickConvert");
     shortcut_enabled.set_margin_start(12);
     shortcut_enabled.set_active(state.borrow().prefs.global_shortcut_enabled);
     shortcut_enabled.set_sensitive(shortcut::is_kde_session());
@@ -738,9 +757,8 @@ fn build_preferences_dialog(
     shortcut_label.set_hexpand(true);
 
     let shortcut_button = Button::with_label("Change…");
-    shortcut_button.set_sensitive(
-        shortcut::is_kde_session() && state.borrow().prefs.global_shortcut_enabled,
-    );
+    shortcut_button
+        .set_sensitive(shortcut::is_kde_session() && state.borrow().prefs.global_shortcut_enabled);
 
     shortcut_row.append(&shortcut_label);
     shortcut_row.append(&shortcut_button);
@@ -993,21 +1011,17 @@ fn category_drop_down() -> DropDown {
     DropDown::from_strings(&labels)
 }
 
-/// When the input field is focused, narrow dropdowns based on a detected unit suffix.
-fn apply_input_filters(text: &str, state: &mut AppState) {
-    if state.input_focused {
-        if let Some(detected) = peek_unit_from_input(text) {
+/// When an input field is focused, narrow dropdowns based on a detected unit suffix.
+fn apply_input_filters(primary: &str, secondary: &str, state: &mut AppState) {
+    if state.input_focus != InputFocus::None {
+        let (focused, other) = match state.input_focus {
+            InputFocus::Secondary => (secondary, primary),
+            InputFocus::Primary | InputFocus::None => (primary, secondary),
+        };
+        let detected = peek_unit_from_input(focused).or_else(|| peek_unit_from_input(other));
+        if let Some(detected) = detected {
+            assign_detected_unit(state, detected);
             let category = detected.category();
-            state.category = category;
-            state.input_unit = detected;
-            if !state
-                .to_options
-                .iter()
-                .any(|u| *u == state.output_unit)
-                || state.output_unit.category() != category
-            {
-                state.output_unit = auto_output_unit(detected);
-            }
             state.category_options = vec![category];
             state.from_options = Unit::units_for_category(category).to_vec();
             state.to_options = Unit::compatible_targets(detected);
@@ -1046,6 +1060,83 @@ fn populate_unit_dropdown_list(dropdown: &DropDown, units: &[Unit], selected: Un
     dropdown.set_model(Some(&model));
     if let Some(idx) = units.iter().position(|&u| u == selected) {
         dropdown.set_selected(idx as u32);
+    }
+}
+
+fn track_input_focus(
+    entry: &Entry,
+    which: InputFocus,
+    state: &Rc<RefCell<AppState>>,
+    refresh: &Rc<dyn Fn()>,
+) {
+    let focus_ctrl = gtk4::EventControllerFocus::new();
+    focus_ctrl.connect_enter({
+        let state_c = state.clone();
+        let refresh_c = refresh.clone();
+        move |_| {
+            state_c.borrow_mut().input_focus = which;
+            refresh_c();
+        }
+    });
+    focus_ctrl.connect_leave({
+        let state_c = state.clone();
+        let refresh_c = refresh.clone();
+        move |_| {
+            let mut s = state_c.borrow_mut();
+            if s.input_focus == which {
+                s.input_focus = InputFocus::None;
+            }
+            drop(s);
+            refresh_c();
+        }
+    });
+    entry.add_controller(focus_ctrl);
+}
+
+fn pair_inputs(
+    primary: Option<ParsedInput>,
+    secondary: Option<ParsedInput>,
+) -> Option<(ParsedInput, Option<ParsedInput>)> {
+    match (primary, secondary) {
+        (None, None) => None,
+        (Some(first), second) => Some((first, second)),
+        (None, Some(second)) => Some((second, None)),
+    }
+}
+
+fn show_convert_error(
+    result_label: &Label,
+    error_label: &Label,
+    result_text: &Rc<RefCell<String>>,
+    error: &impl std::fmt::Display,
+) {
+    result_label.set_text("—");
+    *result_text.borrow_mut() = String::new();
+    error_label.set_text(&error.to_string());
+}
+
+fn format_conversion(first: Decimal, second: Option<Decimal>, unit: Unit, places: u32) -> String {
+    match second {
+        Some(second) => format!(
+            "{} × {} {}",
+            format_decimal(first, places),
+            format_decimal(second, places),
+            unit.short_suffix()
+        ),
+        None => format!("{} {}", format_decimal(first, places), unit.short_suffix()),
+    }
+}
+
+/// Keep a target unit the user already picked. A typed suffix still switches
+/// the source unit, and still picks a partner unit when the target is just
+/// the automatic opposite of the previous source.
+fn assign_detected_unit(state: &mut AppState, detected: Unit) {
+    let keep_output = state.output_unit != Unit::paired_unit(state.input_unit)
+        && state.output_unit.category() == detected.category();
+    state.category = detected.category();
+    state.input_unit = detected;
+    if !keep_output {
+        state.output_unit = auto_output_unit(detected);
     }
 }
 

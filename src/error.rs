@@ -9,6 +9,7 @@ pub enum ConvertError {
     Overflow,
     Underflow,
     IncompatibleUnits,
+    MismatchedDimensions,
     DivisionByZero,
     UnknownUnit(String),
 }
@@ -23,6 +24,9 @@ impl fmt::Display for ConvertError {
             Self::Overflow => write!(f, "Result overflows"),
             Self::Underflow => write!(f, "Result underflows"),
             Self::IncompatibleUnits => write!(f, "These units cannot be converted"),
+            Self::MismatchedDimensions => {
+                write!(f, "Both dimensions must use the same kind of unit")
+            }
             Self::DivisionByZero => write!(f, "Cannot convert with zero offset"),
             Self::UnknownUnit(u) => write!(f, "Unknown unit: {u}"),
         }
