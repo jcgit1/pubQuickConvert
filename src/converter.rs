@@ -1,7 +1,7 @@
+use crate::error::{ConvertError, ConvertResult};
 use rust_decimal::prelude::*;
 use rust_decimal::Decimal;
 use rust_decimal_macros::dec;
-use crate::error::{ConvertError, ConvertResult};
 
 /// Maximum magnitude accepted for user input (rejects values like 1e1000).
 fn max_input() -> Decimal {
@@ -147,22 +147,41 @@ impl UnitCategory {
 impl Unit {
     pub fn category(self) -> UnitCategory {
         match self {
-            Self::Feet | Self::Inches | Self::Yards | Self::Miles | Self::Meters
-            | Self::Centimeters | Self::Millimeters | Self::Micrometers | Self::Kilometers => {
-                UnitCategory::Length
-            }
-            Self::SquareMeters | Self::SquareCentimeters | Self::SquareFeet
-            | Self::SquareInches | Self::Acres => UnitCategory::Area,
+            Self::Feet
+            | Self::Inches
+            | Self::Yards
+            | Self::Miles
+            | Self::Meters
+            | Self::Centimeters
+            | Self::Millimeters
+            | Self::Micrometers
+            | Self::Kilometers => UnitCategory::Length,
+            Self::SquareMeters
+            | Self::SquareCentimeters
+            | Self::SquareFeet
+            | Self::SquareInches
+            | Self::Acres => UnitCategory::Area,
             Self::Pounds | Self::Ounces | Self::Kilograms | Self::Grams | Self::MetricTons => {
                 UnitCategory::Weight
             }
             Self::Fahrenheit | Self::Celsius | Self::Kelvin => UnitCategory::Temperature,
-            Self::Gallons | Self::Quarts | Self::FluidOunces | Self::Liters
-            | Self::Milliliters | Self::CubicMeters => UnitCategory::Volume,
-            Self::MetersPerSecond | Self::KilometersPerHour | Self::MilesPerHour
-            | Self::FeetPerSecond | Self::Knots => UnitCategory::Speed,
+            Self::Gallons
+            | Self::Quarts
+            | Self::FluidOunces
+            | Self::Liters
+            | Self::Milliliters
+            | Self::CubicMeters => UnitCategory::Volume,
+            Self::MetersPerSecond
+            | Self::KilometersPerHour
+            | Self::MilesPerHour
+            | Self::FeetPerSecond
+            | Self::Knots => UnitCategory::Speed,
             Self::Newtons | Self::Kilonewtons | Self::PoundForce => UnitCategory::Force,
-            Self::Pascals | Self::Kilopascals | Self::Megapascals | Self::Psi | Self::Bar
+            Self::Pascals
+            | Self::Kilopascals
+            | Self::Megapascals
+            | Self::Psi
+            | Self::Bar
             | Self::Atmospheres => UnitCategory::Pressure,
             Self::Joules | Self::Kilojoules | Self::Calories | Self::Kilocalories | Self::Btu => {
                 UnitCategory::Energy
@@ -174,20 +193,57 @@ impl Unit {
 
     pub fn system(self) -> UnitSystem {
         match self {
-            Self::Feet | Self::Inches | Self::Yards | Self::Miles | Self::Pounds | Self::Ounces
-            | Self::Gallons | Self::Quarts | Self::FluidOunces | Self::Fahrenheit
-            | Self::SquareFeet | Self::SquareInches | Self::Acres | Self::MilesPerHour
-            | Self::FeetPerSecond | Self::PoundForce | Self::Psi | Self::Btu | Self::Horsepower => {
-                UnitSystem::Imperial
-            }
-            Self::Meters | Self::Centimeters | Self::Millimeters | Self::Micrometers
-            | Self::Kilometers | Self::Kilograms | Self::Grams | Self::MetricTons | Self::Liters
-            | Self::Milliliters | Self::CubicMeters | Self::Celsius | Self::Kelvin
-            | Self::SquareMeters | Self::SquareCentimeters | Self::MetersPerSecond
-            | Self::KilometersPerHour | Self::Knots | Self::Newtons | Self::Kilonewtons
-            | Self::Pascals | Self::Kilopascals | Self::Megapascals | Self::Bar
-            | Self::Atmospheres | Self::Joules | Self::Kilojoules | Self::Calories
-            | Self::Kilocalories | Self::Watts | Self::Kilowatts | Self::Degrees
+            Self::Feet
+            | Self::Inches
+            | Self::Yards
+            | Self::Miles
+            | Self::Pounds
+            | Self::Ounces
+            | Self::Gallons
+            | Self::Quarts
+            | Self::FluidOunces
+            | Self::Fahrenheit
+            | Self::SquareFeet
+            | Self::SquareInches
+            | Self::Acres
+            | Self::MilesPerHour
+            | Self::FeetPerSecond
+            | Self::PoundForce
+            | Self::Psi
+            | Self::Btu
+            | Self::Horsepower => UnitSystem::Imperial,
+            Self::Meters
+            | Self::Centimeters
+            | Self::Millimeters
+            | Self::Micrometers
+            | Self::Kilometers
+            | Self::Kilograms
+            | Self::Grams
+            | Self::MetricTons
+            | Self::Liters
+            | Self::Milliliters
+            | Self::CubicMeters
+            | Self::Celsius
+            | Self::Kelvin
+            | Self::SquareMeters
+            | Self::SquareCentimeters
+            | Self::MetersPerSecond
+            | Self::KilometersPerHour
+            | Self::Knots
+            | Self::Newtons
+            | Self::Kilonewtons
+            | Self::Pascals
+            | Self::Kilopascals
+            | Self::Megapascals
+            | Self::Bar
+            | Self::Atmospheres
+            | Self::Joules
+            | Self::Kilojoules
+            | Self::Calories
+            | Self::Kilocalories
+            | Self::Watts
+            | Self::Kilowatts
+            | Self::Degrees
             | Self::Radians => UnitSystem::Metric,
         }
     }
@@ -487,8 +543,19 @@ const UNIT_ALIASES: &[(&str, Unit)] = &[
     ("grams", Unit::Grams),
     ("inch", Unit::Inches),
     ("inches", Unit::Inches),
+    // Two apostrophes is the plain-text stand-in for an inch mark. Match it
+    // before the single apostrophe so `11''` is inches, not feet.
+    ("''", Unit::Inches),
+    ("″", Unit::Inches),
+    ("\"", Unit::Inches),
+    ("\u{201c}", Unit::Inches),
+    ("\u{201d}", Unit::Inches),
     ("foot", Unit::Feet),
     ("feet", Unit::Feet),
+    ("′", Unit::Feet),
+    ("'", Unit::Feet),
+    ("\u{2018}", Unit::Feet),
+    ("\u{2019}", Unit::Feet),
     ("yard", Unit::Yards),
     ("yards", Unit::Yards),
     ("mile", Unit::Miles),
@@ -650,6 +717,50 @@ pub fn peek_unit_from_input(raw: &str) -> Option<Unit> {
     None
 }
 
+pub fn parse_optional_expression(raw: &str) -> ConvertResult<Option<ParsedInput>> {
+    if raw.trim().is_empty() {
+        Ok(None)
+    } else {
+        parse_input_expression(raw).map(Some)
+    }
+}
+
+/// Convert one value, or a width × height pair, into `to`.
+///
+/// A dimension with no unit suffix uses a suffix from the other dimension
+/// when there is one, otherwise `fallback_from`. So `8.5"` and `11` are both
+/// inches, and `11` and `8.5"` are both inches too.
+pub fn convert_pair(
+    first: &ParsedInput,
+    second: Option<&ParsedInput>,
+    fallback_from: Unit,
+    to: Unit,
+    places: u32,
+) -> ConvertResult<(Decimal, Option<Decimal>)> {
+    let explicit = first
+        .unit
+        .or(second.and_then(|dim| dim.unit))
+        .unwrap_or(fallback_from);
+    let from_first = first.unit.unwrap_or(explicit);
+    if from_first.category() != to.category() {
+        return Err(ConvertError::IncompatibleUnits);
+    }
+
+    let converted_first = convert(first.value, from_first, to, places)?;
+    let converted_second = match second {
+        Some(second) => {
+            let from_second = second.unit.unwrap_or(explicit);
+            if from_second.category() != from_first.category() {
+                return Err(ConvertError::MismatchedDimensions);
+            }
+            Some(convert(second.value, from_second, to, places)?)
+        }
+        None => None,
+    };
+
+    Ok((converted_first, converted_second))
+}
+
 pub fn parse_input_expression(raw: &str) -> ConvertResult<ParsedInput> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -660,9 +771,9 @@ pub fn parse_input_expression(raw: &str) -> ConvertResult<ParsedInput> {
     let value = parse_number(&number_part)?;
 
     let unit = match unit_token {
-        Some(token) => Some(
-            Unit::from_alias(&token).ok_or_else(|| ConvertError::UnknownUnit(token.clone()))?,
-        ),
+        Some(token) => {
+            Some(Unit::from_alias(&token).ok_or_else(|| ConvertError::UnknownUnit(token.clone()))?)
+        }
         None => None,
     };
 
@@ -756,9 +867,7 @@ pub fn convert(
 
 fn to_base(value: Decimal, unit: Unit) -> ConvertResult<Decimal> {
     let factor = factor_to_base(unit)?;
-    value
-        .checked_mul(factor)
-        .ok_or(ConvertError::Overflow)
+    value.checked_mul(factor).ok_or(ConvertError::Overflow)
 }
 
 fn from_base(value: Decimal, unit: Unit) -> ConvertResult<Decimal> {
@@ -766,9 +875,7 @@ fn from_base(value: Decimal, unit: Unit) -> ConvertResult<Decimal> {
     if factor.is_zero() {
         return Err(ConvertError::DivisionByZero);
     }
-    value
-        .checked_div(factor)
-        .ok_or(ConvertError::Underflow)
+    value.checked_div(factor).ok_or(ConvertError::Underflow)
 }
 
 fn factor_to_base(unit: Unit) -> ConvertResult<Decimal> {
@@ -839,12 +946,10 @@ fn factor_to_base(unit: Unit) -> ConvertResult<Decimal> {
 fn convert_temperature(value: Decimal, from: Unit, to: Unit) -> ConvertResult<Decimal> {
     let celsius = match from {
         Unit::Celsius => value,
-        Unit::Fahrenheit => {
-            (value - dec!(32))
-                .checked_mul(dec!(5))
-                .and_then(|v| v.checked_div(dec!(9)))
-                .ok_or(ConvertError::Overflow)?
-        }
+        Unit::Fahrenheit => (value - dec!(32))
+            .checked_mul(dec!(5))
+            .and_then(|v| v.checked_div(dec!(9)))
+            .ok_or(ConvertError::Overflow)?,
         Unit::Kelvin => value
             .checked_sub(dec!(273.15))
             .ok_or(ConvertError::Underflow)?,
@@ -885,7 +990,9 @@ fn convert_angle(value: Decimal, from: Unit, to: Unit) -> ConvertResult<Decimal>
 
 pub fn format_decimal(value: Decimal, decimal_places: u32) -> String {
     let places = decimal_places.clamp(2, 6);
-    value.round_dp_with_strategy(places, RoundingStrategy::MidpointAwayFromZero).to_string()
+    value
+        .round_dp_with_strategy(places, RoundingStrategy::MidpointAwayFromZero)
+        .to_string()
 }
 
 #[cfg(test)]
@@ -921,6 +1028,93 @@ mod tests {
     fn parse_glued_suffix() {
         let p = parse_input_expression("36in").unwrap();
         assert_eq!(p.unit, Some(Unit::Inches));
+    }
+
+    #[test]
+    fn parse_inch_double_quote_symbol() {
+        let p = parse_input_expression("36\"").unwrap();
+        assert_eq!(p.value, dec!(36));
+        assert_eq!(p.unit, Some(Unit::Inches));
+    }
+
+    #[test]
+    fn parse_feet_apostrophe_symbol() {
+        let p = parse_input_expression("10'").unwrap();
+        assert_eq!(p.value, dec!(10));
+        assert_eq!(p.unit, Some(Unit::Feet));
+    }
+
+    #[test]
+    fn parse_typographic_prime_symbols() {
+        let inches = parse_input_expression("12″").unwrap();
+        assert_eq!(inches.unit, Some(Unit::Inches));
+        let feet = parse_input_expression("8′").unwrap();
+        assert_eq!(feet.unit, Some(Unit::Feet));
+    }
+
+    #[test]
+    fn peek_inch_and_foot_symbols() {
+        assert_eq!(peek_unit_from_input("36\""), Some(Unit::Inches));
+        assert_eq!(peek_unit_from_input("5'"), Some(Unit::Feet));
+    }
+
+    #[test]
+    fn curly_quotes_are_inches_and_feet() {
+        let inches = parse_input_expression("8.5\u{201d}").unwrap();
+        assert_eq!(inches.value, dec!(8.5));
+        assert_eq!(inches.unit, Some(Unit::Inches));
+        let feet = parse_input_expression("6\u{2018}").unwrap();
+        assert_eq!(feet.unit, Some(Unit::Feet));
+    }
+
+    #[test]
+    fn two_apostrophes_mean_inches() {
+        let p = parse_input_expression("11''").unwrap();
+        assert_eq!(p.value, dec!(11));
+        assert_eq!(p.unit, Some(Unit::Inches));
+        assert_eq!(parse_input_expression("5'").unwrap().unit, Some(Unit::Feet));
+    }
+
+    #[test]
+    fn letter_sheet_to_centimeters() {
+        let width = parse_input_expression("8.5\"").unwrap();
+        let height = parse_input_expression("11\"").unwrap();
+        let (w, h) =
+            convert_pair(&width, Some(&height), Unit::Inches, Unit::Centimeters, 2).unwrap();
+        assert_eq!(w, dec!(21.59));
+        assert_eq!(h, Some(dec!(27.94)));
+    }
+
+    #[test]
+    fn second_dimension_inherits_inch_mark() {
+        let width = parse_input_expression("8.5\"").unwrap();
+        let height = parse_input_expression("11").unwrap();
+        let (w, h) = convert_pair(&width, Some(&height), Unit::Feet, Unit::Centimeters, 2).unwrap();
+        assert_eq!(w, dec!(21.59));
+        assert_eq!(h, Some(dec!(27.94)));
+
+        let width = parse_input_expression("8.5").unwrap();
+        let height = parse_input_expression("11\"").unwrap();
+        let (w, h) = convert_pair(&width, Some(&height), Unit::Feet, Unit::Centimeters, 2).unwrap();
+        assert_eq!(w, dec!(21.59));
+        assert_eq!(h, Some(dec!(27.94)));
+    }
+
+    #[test]
+    fn feet_and_inches_marks_convert_together() {
+        let width = parse_input_expression("1'").unwrap();
+        let height = parse_input_expression("6\"").unwrap();
+        let (w, h) = convert_pair(&width, Some(&height), Unit::Meters, Unit::Inches, 2).unwrap();
+        assert_eq!(w, dec!(12.00));
+        assert_eq!(h, Some(dec!(6.00)));
+    }
+
+    #[test]
+    fn mismatched_dimension_units() {
+        let width = parse_input_expression("8.5\"").unwrap();
+        let height = parse_input_expression("2 kg").unwrap();
+        let err = convert_pair(&width, Some(&height), Unit::Inches, Unit::Centimeters, 2);
+        assert_eq!(err, Err(ConvertError::MismatchedDimensions));
     }
 
     #[test]
@@ -979,6 +1173,9 @@ mod tests {
     #[test]
     fn rejects_extreme_magnitude() {
         let big = format!("{} m", "9".repeat(20));
-        assert_eq!(parse_input_expression(&big), Err(ConvertError::InputTooLarge));
+        assert_eq!(
+            parse_input_expression(&big),
+            Err(ConvertError::InputTooLarge)
+        );
     }
 }
