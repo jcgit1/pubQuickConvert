@@ -77,6 +77,48 @@ struct UiHandles {
     output_unit_dropdown: DropDown,
 }
 
+/// Avoids rebuilding DropDown models when labels are unchanged (expensive on Windows).
+struct DropdownCaches {
+    category: RefCell<Option<Vec<String>>>,
+    from: RefCell<Option<Vec<String>>>,
+    to: RefCell<Option<Vec<String>>>,
+}
+
+impl DropdownCaches {
+    fn new() -> Self {
+        Self {
+            category: RefCell::new(None),
+            from: RefCell::new(None),
+            to: RefCell::new(None),
+        }
+    }
+}
+
+struct Debouncer {
+    source: Rc<RefCell<Option<gtk4::glib::SourceId>>>,
+}
+
+impl Debouncer {
+    fn new() -> Self {
+        Self {
+            source: Rc::new(RefCell::new(None)),
+        }
+    }
+
+    fn schedule(&self, delay_ms: u32, f: Rc<dyn Fn()>) {
+        if let Some(id) = self.source.borrow_mut().take() {
+            id.remove();
+        }
+        let source = self.source.clone();
+        let id = gtk4::glib::timeout_add_local(Duration::from_millis(delay_ms as u64), move || {
+            f();
+            source.borrow_mut().take();
+            gtk4::glib::ControlFlow::Break
+        });
+        *self.source.borrow_mut() = Some(id);
+    }
+}
+
 struct WindowHandles {
     window: ApplicationWindow,
     input_entry: Entry,
@@ -107,6 +149,9 @@ struct PrefsUi {
 }
 
 fn main() {
+    #[cfg(windows)]
+    configure_windows_env();
+
     let app = AdwApplication::builder()
         .application_id(APP_ID)
         .flags(ApplicationFlags::HANDLES_COMMAND_LINE)
@@ -114,7 +159,10 @@ fn main() {
 
     let window_handles: Rc<RefCell<Option<WindowHandles>>> = Rc::new(RefCell::new(None));
 
-    app.connect_startup(|app| configure_color_scheme(app));
+    app.connect_startup(|app| {
+        configure_color_scheme(app);
+        configure_performance();
+    });
 
     app.connect_command_line({
         let window_handles = window_handles.clone();
@@ -140,6 +188,26 @@ fn main() {
     });
 
     app.run();
+}
+
+/// GTK on Windows can stutter badly while dragging unfocused windows when animations are on.
+/// See: https://gitlab.gnome.org/GNOME/gtk/-/issues/3922
+#[cfg(windows)]
+fn configure_windows_env() {
+    use std::env;
+
+    // Prefer GPU-backed rendering when available (no-op if unsupported).
+    if env::var_os("GSK_RENDERER").is_none() {
+        env::set_var("GSK_RENDERER", "ngl");
+    }
+}
+
+fn configure_performance() {
+    #[cfg(windows)]
+    if let Some(settings) = gtk4::Settings::default() {
+        settings.set_gtk_enable_animations(false);
+        settings.set_gtk_overlay_scrolling(false);
+    }
 }
 
 fn configure_color_scheme(app: &AdwApplication) {
@@ -250,6 +318,9 @@ fn build_ui(app: &AdwApplication, window_handles: &Rc<RefCell<Option<WindowHandl
         .halign(gtk4::Align::Start)
         .selectable(true)
         .build();
+    #[cfg(windows)]
+    result_label.add_css_class("title-2");
+    #[cfg(not(windows))]
     result_label.add_css_class("title-1");
     root.append(&result_label);
 
@@ -276,10 +347,12 @@ fn build_ui(app: &AdwApplication, window_handles: &Rc<RefCell<Option<WindowHandl
         input_unit_dropdown: input_unit_dropdown.clone(),
         output_unit_dropdown: output_unit_dropdown.clone(),
     };
+    let caches = Rc::new(DropdownCaches::new());
 
     let refresh_ui: Rc<dyn Fn()> = Rc::new({
         let state_c = state.clone();
         let ui_c = ui.clone_handles();
+        let caches_c = caches.clone();
         let input_entry_c = input_entry.clone();
         let input_entry_2_c = input_entry_2.clone();
         move || {
@@ -298,9 +371,24 @@ fn build_ui(app: &AdwApplication, window_handles: &Rc<RefCell<Option<WindowHandl
                 )
             };
             state_c.borrow_mut().updating_ui = true;
-            populate_category_dropdown(&ui_c.category_dropdown, &cat_opts, category);
-            populate_unit_dropdown_list(&ui_c.input_unit_dropdown, &from_opts, input_unit);
-            populate_unit_dropdown_list(&ui_c.output_unit_dropdown, &to_opts, output_unit);
+            populate_category_dropdown(
+                &ui_c.category_dropdown,
+                &caches_c.category,
+                &cat_opts,
+                category,
+            );
+            populate_unit_dropdown_list(
+                &ui_c.input_unit_dropdown,
+                &caches_c.from,
+                &from_opts,
+                input_unit,
+            );
+            populate_unit_dropdown_list(
+                &ui_c.output_unit_dropdown,
+                &caches_c.to,
+                &to_opts,
+                output_unit,
+            );
             state_c.borrow_mut().updating_ui = false;
         }
     });
@@ -341,15 +429,18 @@ fn build_ui(app: &AdwApplication, window_handles: &Rc<RefCell<Option<WindowHandl
                 return;
             };
 
-            let (from_unit, to_unit, places) = {
+            let (from_unit, to_unit, places, detected_unit) = {
                 let mut s = state_c.borrow_mut();
-                if let Some(detected) = first.unit.or(second.as_ref().and_then(|dim| dim.unit)) {
+                let detected = first.unit.or(second.as_ref().and_then(|dim| dim.unit));
+                if let Some(detected) = detected {
                     assign_detected_unit(&mut s, detected);
                 }
-                (s.input_unit, s.output_unit, s.prefs.decimal_places)
+                (s.input_unit, s.output_unit, s.prefs.decimal_places, detected)
             };
 
-            refresh_ui_c();
+            if detected_unit.is_some() {
+                refresh_ui_c();
+            }
 
             match convert_pair(&first, second.as_ref(), from_unit, to_unit, places) {
                 Ok((result, second_result)) => {
@@ -468,12 +559,22 @@ fn build_ui(app: &AdwApplication, window_handles: &Rc<RefCell<Option<WindowHandl
     track_input_focus(&input_entry, InputFocus::Primary, &state, &refresh_ui);
     track_input_focus(&input_entry_2, InputFocus::Secondary, &state, &refresh_ui);
 
+    let input_debouncer = Rc::new(Debouncer::new());
+    let debounce_ms = if cfg!(windows) { 120 } else { 60 };
     let on_input_changed: Rc<dyn Fn()> = Rc::new({
         let run = run.clone();
         let refresh_c = refresh_ui.clone();
+        let input_debouncer = input_debouncer.clone();
         move || {
-            refresh_c();
-            run();
+            let work = Rc::new({
+                let run = run.clone();
+                let refresh_c = refresh_c.clone();
+                move || {
+                    refresh_c();
+                    run();
+                }
+            });
+            input_debouncer.schedule(debounce_ms, work);
         }
     });
     input_entry.connect_changed({
@@ -1041,26 +1142,47 @@ fn apply_input_filters(primary: &str, secondary: &str, state: &mut AppState) {
     }
 }
 
-fn populate_category_dropdown(
+fn update_dropdown_model(
     dropdown: &DropDown,
-    categories: &[UnitCategory],
-    selected: UnitCategory,
+    cache: &RefCell<Option<Vec<String>>>,
+    labels: &[String],
+    selected_idx: Option<u32>,
 ) {
-    let labels: Vec<&str> = categories.iter().map(|c| c.label()).collect();
-    let model = gtk4::StringList::new(&labels.iter().map(|s| *s).collect::<Vec<_>>());
-    dropdown.set_model(Some(&model));
-    if let Some(idx) = categories.iter().position(|&c| c == selected) {
-        dropdown.set_selected(idx as u32);
+    let needs_rebuild = cache.borrow().as_ref().map(|c| c.as_slice()) != Some(labels);
+    if needs_rebuild {
+        let refs: Vec<&str> = labels.iter().map(String::as_str).collect();
+        let model = gtk4::StringList::new(&refs);
+        dropdown.set_model(Some(&model));
+        *cache.borrow_mut() = Some(labels.to_vec());
+    }
+    if let Some(idx) = selected_idx {
+        dropdown.set_selected(idx);
     }
 }
 
-fn populate_unit_dropdown_list(dropdown: &DropDown, units: &[Unit], selected: Unit) {
-    let labels: Vec<&str> = units.iter().map(|u| u.label()).collect();
-    let model = gtk4::StringList::new(&labels.iter().map(|s| *s).collect::<Vec<_>>());
-    dropdown.set_model(Some(&model));
-    if let Some(idx) = units.iter().position(|&u| u == selected) {
-        dropdown.set_selected(idx as u32);
-    }
+fn populate_category_dropdown(
+    dropdown: &DropDown,
+    cache: &RefCell<Option<Vec<String>>>,
+    categories: &[UnitCategory],
+    selected: UnitCategory,
+) {
+    let labels: Vec<String> = categories.iter().map(|c| c.label().to_string()).collect();
+    let idx = categories
+        .iter()
+        .position(|&c| c == selected)
+        .map(|i| i as u32);
+    update_dropdown_model(dropdown, cache, &labels, idx);
+}
+
+fn populate_unit_dropdown_list(
+    dropdown: &DropDown,
+    cache: &RefCell<Option<Vec<String>>>,
+    units: &[Unit],
+    selected: Unit,
+) {
+    let labels: Vec<String> = units.iter().map(|u| u.label().to_string()).collect();
+    let idx = units.iter().position(|&u| u == selected).map(|i| i as u32);
+    update_dropdown_model(dropdown, cache, &labels, idx);
 }
 
 fn track_input_focus(
